@@ -316,8 +316,8 @@ class TestHelper extends SQLImplicits {
       }
     }
     (keys, values).zipped.foreach { (k, v) =>
-      if (SQLConf.staticConfKeys.contains(k)) {
-        throw new AnalysisException(s"Cannot modify the value of a static config: $k")
+      if (SQLConf.get.getAllConfs.contains(k)) {
+        throw new IllegalStateException(s"Cannot modify the value of a static config: $k")
       }
       conf.setConfString(k, v)
     }

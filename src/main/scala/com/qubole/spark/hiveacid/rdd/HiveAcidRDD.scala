@@ -24,7 +24,6 @@ import java.text.SimpleDateFormat
 import java.util.concurrent.ConcurrentHashMap
 import java.util.{Date, Locale}
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 import scala.reflect.ClassTag
 import com.qubole.shaded.hadoop.hive.common.ValidWriteIdList
@@ -45,6 +44,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import scala.jdk.CollectionConverters._
 
 // This file has lot of borrowed code from org.apache.spark.rdd.HadoopRdd
 private object Cache {
@@ -208,7 +208,7 @@ private[hiveacid] class HiveAcidRDD[K, V](sc: SparkContext,
       broadcastedConf, shouldCloneJobConf, initLocalJobConfFuncOpt)
 
     // add the credentials here as this can be called before SparkContext initialized
-    SparkHadoopUtil.get.addCredentials(jobConf)
+//    SparkHadoopUtil.get.addCredentials(jobConf)
     val paths = FileInputFormat.getInputPaths(jobConf)
     val partitions = HiveAcidPartitionComputer.getFromSplitsCache(paths, validWriteIds)
     if (partitions.isDefined) {
@@ -480,9 +480,13 @@ object HiveAcidRDD extends Logging {
     } else {
       val finalPaths = new ListBuffer[Path]()
       val pathsWithFileOriginals = new ListBuffer[Path]()
-      val dirs = FileInputFormat.getInputPaths(jobConf).toSeq // Seq(acidState.location)
-      HiveInputFormat.processPathsForMmRead(dirs, jobConf, validWriteIds,
-        finalPaths, pathsWithFileOriginals)
+      val dirs = FileInputFormat.getInputPaths(jobConf).toList.asJava // Seq(acidState.location)
+      HiveInputFormat.processPathsForMmRead(
+        dirs,
+        jobConf,
+        validWriteIds,
+        finalPaths.asJava,
+        pathsWithFileOriginals.asJava)
 
       if (finalPaths.nonEmpty) {
         FileInputFormat.setInputPaths(jobConf, finalPaths.toList: _*)
@@ -502,7 +506,7 @@ object HiveAcidRDD extends Logging {
         // the real input format multiple times... however some split concurrency/etc configs
         // that are applied separately in each call will effectively be ignored for such splits.
         jobConf = HiveInputFormat.createConfForMmOriginalsSplit(jobConf,
-          pathsWithFileOriginals)
+          pathsWithFileOriginals.asJava)
       }
 
     }

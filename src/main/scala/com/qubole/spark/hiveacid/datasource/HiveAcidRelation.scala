@@ -30,8 +30,8 @@ import com.qubole.spark.hiveacid.merge.{MergeWhenClause, MergeWhenNotInsert}
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import scala.jdk.CollectionConverters._
 
-import collection.JavaConversions._
 
 /**
   * Container for all metadata, configuration and schema to perform operations on
@@ -78,7 +78,7 @@ case class HiveAcidRelation(sparkSession: SparkSession,
   }
 
   def update(condition: Option[Column], newValues: Map[String, Column]): Unit = {
-    hiveAcidTable.update(condition, newValues)
+    hiveAcidTable.update(condition, newValues.asJava)
   }
 
   def delete(condition: Column): Unit = {

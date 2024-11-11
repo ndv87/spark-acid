@@ -21,9 +21,16 @@ package org.apache.spark.sql.hive
 
 import scala.collection.JavaConverters._
 import com.qubole.spark.hiveacid.hive.HiveAcidMetadata
+import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTablePartition, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, Expression, InterpretedPredicate, PrettyAttribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSeq, BoundReference, Expression, Nondeterministic}
+import org.apache.spark.sql.catalyst.trees.TreeNode
+
+import scala.collection.Seq
+import scala.util.control.NonFatal
 
 object HiveAcidUtils {
 
@@ -90,4 +97,83 @@ object HiveAcidUtils {
       parameters = properties,
       stats = None) // TODO: need to implement readHiveStats
   }
+}
+
+object InterpretedPredicate {
+//  def create(expression: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate =
+//    create(BindReferences.bindReference(expression, inputSchema))
+
+  def create(expression: Expression): InterpretedPredicate = new InterpretedPredicate(expression)
+}
+
+case class InterpretedPredicate(expression: Expression) extends BasePredicate {
+  override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+
+  override def initialize(partitionIndex: Int): Unit = {
+    super.initialize(partitionIndex)
+    expression.foreach {
+      case n: Nondeterministic => n.initialize(partitionIndex)
+      case _ =>
+    }
+  }
+}
+
+object BindReferences extends Logging {
+
+  def bindReference[A <: Expression](
+                                      expression: A,
+                                      input: AttributeSeq,
+                                      allowFailures: Boolean = false): A = {
+    expression.transform { case a: AttributeReference =>
+      attachTree(a, "Binding attribute") {
+        val ordinal = input.indexOf(a.exprId)
+        if (ordinal == -1) {
+          if (allowFailures) {
+            a
+          } else {
+            sys.error(s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
+          }
+        } else {
+          BoundReference(ordinal, a.dataType, input(ordinal).nullable)
+        }
+      }
+    }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
+  }
+
+  def attachTree[TreeType <: TreeNode[_], A](tree: TreeType, msg: String = "")(f: => A): A = {
+    try f catch {
+      // SPARK-16748: We do not want SparkExceptions from job failures in the planning phase
+      // to create TreeNodeException. Hence, wrap exception only if it is not SparkException.
+      case NonFatal(e) if !e.isInstanceOf[SparkException] =>
+        throw new TreeNodeException(tree, msg, e)
+    }
+  }
+}
+
+class TreeNodeException[TreeType <: TreeNode[_]](
+                                                  @transient val tree: TreeType,
+                                                  msg: String,
+                                                  cause: Throwable)
+  extends Exception(msg, cause) {
+
+  val treeString = tree.toString
+
+  // Yes, this is the same as a default parameter, but... those don't seem to work with SBT
+  // external project dependencies for some reason.
+  def this(tree: TreeType, msg: String) = this(tree, msg, null)
+
+  override def getMessage: String = {
+    s"${super.getMessage}, tree:${if (treeString contains "\n") "\n" else " "}$tree"
+  }
+}
+
+abstract class BasePredicate {
+  def eval(r: InternalRow): Boolean
+
+  /**
+   * Initializes internal states given the current partition index.
+   * This is used by nondeterministic expressions to set initial states.
+   * The default implementation does nothing.
+   */
+  def initialize(partitionIndex: Int): Unit = {}
 }

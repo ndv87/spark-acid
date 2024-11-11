@@ -19,6 +19,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -31,7 +32,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.types.StructType
 
 object SqlUtils {
-  def convertToDF(sparkSession: SparkSession, plan : LogicalPlan): DataFrame = {
+  def convertToDF(sparkSession: SparkSession, plan: LogicalPlan): DataFrame = {
     Dataset.ofRows(sparkSession, plan)
   }
 
@@ -60,9 +61,9 @@ object SqlUtils {
       resolvedExpr.flatMap(_.references).filter(!_.resolved).foreach {
         attr => {
           val failedMsg = exprName match {
-            case Some(name) => s"${attr.sql} resolution in $name given these columns: "+
+            case Some(name) => s"${attr.sql} resolution in $name given these columns: " +
               planContaining.flatMap(_.output).map(_.name).mkString(",")
-            case _ => s"${attr.sql} resolution failed given these columns: "+
+            case _ => s"${attr.sql} resolution failed given these columns: " +
               planContaining.flatMap(_.output).map(_.name).mkString(",")
           }
           attr.failAnalysis(failedMsg)
@@ -77,13 +78,14 @@ object SqlUtils {
   }
 
   /**
-    * Qualify all the column names in the DF.
-    * Attributes used in DF output will have fully qualified names
-    * @param sparkSession
-    * @param df DataFrame created by reading ACID table
-    * @param fullyQualifiedTableName Qualified name of the Hive ACID Table
-    * @return
-    */
+   * Qualify all the column names in the DF.
+   * Attributes used in DF output will have fully qualified names
+   *
+   * @param sparkSession
+   * @param df                      DataFrame created by reading ACID table
+   * @param fullyQualifiedTableName Qualified name of the Hive ACID Table
+   * @return
+   */
   def getDFQualified(sparkSession: SparkSession,
                      df: DataFrame,
                      fullyQualifiedTableName: String) = {
@@ -116,21 +118,24 @@ object SqlUtils {
   }
 
   /**
-    * Convert RDD into DataFrame using the attributeList.
-    * Based on [[SparkSession.createDataFrame()]] implementation but here,
-    * attributes are provided.
-    * @param sparkSession
-    * @param rdd
-    * @param schema
-    * @param attributes
-    * @return
-    */
+   * Convert RDD into DataFrame using the attributeList.
+   * Based on [[SparkSession.createDataFrame()]] implementation but here,
+   * attributes are provided.
+   *
+   * @param sparkSession
+   * @param rdd
+   * @param schema
+   * @param attributes
+   * @return
+   */
   def createDataFrameUsingAttributes(sparkSession: SparkSession,
                                      rdd: RDD[Row],
                                      schema: StructType,
                                      attributes: Seq[Attribute]): DataFrame = {
     val encoder = RowEncoder(schema)
-    val catalystRows = rdd.map(encoder.toRow)
+    val toInternalRow = encoder.createSerializer()
+
+    val catalystRows = rdd.map(row => toInternalRow(row))
     val logicalPlan = LogicalRDD(
       attributes,
       catalystRows,
@@ -153,4 +158,6 @@ object SqlUtils {
 case class FakeLogicalPlan(expr: Expression, children: Seq[LogicalPlan])
   extends LogicalPlan {
   override def output: Seq[Attribute] = children.foldLeft(Seq[Attribute]())((out, child) => out ++ child.output)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = ???
 }

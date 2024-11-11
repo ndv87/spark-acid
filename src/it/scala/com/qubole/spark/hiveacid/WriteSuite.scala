@@ -22,11 +22,12 @@ package com.qubole.spark.hiveacid
 
 import org.apache.log4j.{Level, LogManager, Logger}
 import org.scalatest._
+import org.scalatest.funsuite.AnyFunSuite
 
 import scala.util.control.NonFatal
 
 @Ignore
-class WriteSuite extends FunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
+class WriteSuite extends AnyFunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
 
   val log: Logger = LogManager.getLogger(this.getClass)
   log.setLevel(Level.INFO)

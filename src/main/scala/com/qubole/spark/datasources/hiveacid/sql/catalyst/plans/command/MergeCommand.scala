@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 
+
 case class MergeCommand(targetTable: LogicalPlan,
                         sourceTable: LogicalPlan,
                         matched: Seq[MergeWhenClause],
@@ -68,10 +69,22 @@ case class MergeCommand(targetTable: LogicalPlan,
     SqlUtils.removeTopSubqueryAlias(targetRelation) match {
       case LogicalRelation(relation: HiveAcidRelation, _, _, _) =>
         relation.merge(sourceDf,
-          mergeCondition.expression, matched, insertClause, sourceAlias, targetAlias)
+          mergeCondition.expression, matched.toSeq, insertClause, sourceAlias, targetAlias)
       case _ => throw HiveAcidErrors.tableNotAcidException(targetTable.toString())
     }
 
     Seq.empty
+  }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+
+    newChildren match {
+      case Seq(newTarget, newSource) =>
+        copy(targetTable = newTarget, sourceTable = newSource)
+      case Seq(newTarget, newSource, newRewritePlan) =>
+        copy(targetTable = newTarget, sourceTable = newSource)
+      case _ =>
+        throw new IllegalArgumentException("MergeIntoIcebergTable expects either two or three children")
+    }
   }
 }

@@ -21,8 +21,6 @@ package com.qubole.spark.hiveacid.reader.hive
 
 import java.util
 import java.util.Properties
-
-import scala.collection.JavaConverters._
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.Output
 import com.qubole.shaded.hadoop.hive.conf.HiveConf.ConfVars
@@ -46,7 +44,6 @@ import com.qubole.spark.hiveacid.util._
 import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
-import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
 import org.apache.spark.broadcast.Broadcast
@@ -54,7 +51,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SparkSession, functions}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.CatalogTablePartition
 import org.apache.spark.sql.catalyst.expressions._
@@ -65,6 +62,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.hive.{Hive3Inspectors, HiveAcidUtils}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
+import scala.jdk.CollectionConverters._
 
 /**
  * Helper class for scanning tables stored in Hadoop - e.g., to read
@@ -79,7 +77,7 @@ private[reader] class HiveAcidReader(sparkSession: SparkSession,
                                      hiveAcidOptions: HiveAcidReaderOptions,
                                      validWriteIds: ValidWriteIdList)
 
-extends CastSupport with Reader with Logging {
+extends CastSupport with SQLConfHelper with Reader with Logging {
 
   private val _minSplitsPerRDD = if (sparkSession.sparkContext.isLocal) {
     0 // will be split based on block by default.
@@ -88,8 +86,8 @@ extends CastSupport with Reader with Logging {
       sparkSession.sparkContext.defaultMinPartitions)
   }
 
-  SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(
-    sparkSession.sparkContext.getConf, readerOptions.hadoopConf)
+//  SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(
+//    sparkSession.sparkContext.getConf, readerOptions.hadoopConf)
 
   if (readerOptions.readConf.predicatePushdownEnabled) {
     setPushDownFiltersInHadoopConf(readerOptions.hadoopConf, hiveAcidOptions.dataSchema,
@@ -397,9 +395,9 @@ extends CastSupport with Reader with Logging {
     val dataCols: Seq[String] = dataSchema.fields.map(_.name)
     val requiredColumnIndexes = requiredColumns.map(a => dataCols.indexOf(a): Integer)
     val (sortedIDs, sortedNames) = requiredColumnIndexes.zip(requiredColumns).sorted.unzip
-    conf.set(ColumnProjectionUtils.READ_ALL_COLUMNS, "false")
-    conf.set(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, sortedNames.mkString(","))
-    conf.set(ColumnProjectionUtils.READ_COLUMN_IDS_CONF_STR, sortedIDs.mkString(","))
+//    conf.set(ColumnProjectionUtils.READ_ALL_COLUMNS, "false")
+//    conf.set(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, sortedNames.mkString(","))
+//    conf.set(ColumnProjectionUtils.READ_COLUMN_IDS_CONF_STR, sortedIDs.mkString(","))
   }
 
   private def setPushDownFiltersInHadoopConf(conf: Configuration,
@@ -492,7 +490,7 @@ private[reader] object HiveAcidReader extends Hive3Inspectors with Logging {
                 s"Partition values is missing from raw partitions ${partValues}"
               )
             }
-        }
+        }.toSeq
       }
       case _ => partitions
     }
