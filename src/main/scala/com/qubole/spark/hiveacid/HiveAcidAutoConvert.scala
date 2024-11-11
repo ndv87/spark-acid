@@ -19,16 +19,27 @@
 
 package com.qubole.spark.hiveacid
 
-import java.util.Locale
+import com.qubole.spark.datasources.hiveacid.sql.catalyst.plans.command.{DeleteCommand, MergeCommand, UpdateCommand}
 
+import java.util.Locale
 import com.qubole.spark.datasources.hiveacid.sql.execution.SparkAcidSqlParser
 import org.apache.spark.sql.{SparkSession, SparkSessionExtensions}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, InsertIntoTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, DeleteFromTable, Filter, InsertAction, InsertIntoStatement, InsertStarAction, LogicalPlan, MergeIntoTable, SubqueryAlias, UpdateAction, UpdateStarAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import com.qubole.spark.hiveacid.datasource.HiveAcidDataSource
+import com.qubole.spark.hiveacid.datasource.{HiveAcidDataSource, HiveAcidRelation}
+import com.qubole.spark.hiveacid.merge.{MergeCondition, MergeWhenClause, MergeWhenDelete, MergeWhenNotInsert, MergeWhenUpdateClause}
+import org.apache.spark.sql.catalyst.AliasIdentifier
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.connector.catalog.{Table, TableCatalog}
+import org.apache.spark.sql.functions.expr
+import org.apache.spark.sql.internal.SQLConf
+
+import scala.collection.immutable.Seq
+import scala.util.Try
 
 
 /**
@@ -52,25 +63,85 @@ case class HiveAcidAutoConvert(spark: SparkSession) extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan resolveOperators {
+    val p = plan resolveOperators {
       // Write path
-      case InsertIntoTable(r: HiveTableRelation, partition, query, overwrite, ifPartitionNotExists)
+      case InsertIntoStatement (r: HiveTableRelation, partition, userSpecifiedCols, query, overwrite, ifPartitionNotExists)
         if query.resolved && DDLUtils.isHiveTable(r.tableMeta) && isConvertible(r) =>
-        InsertIntoTable(convert(r), partition, query, overwrite, ifPartitionNotExists)
-
+        InsertIntoStatement (convert(r), partition, userSpecifiedCols, query, overwrite, ifPartitionNotExists)
       // Read path
       case relation: HiveTableRelation
         if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
         convert(relation)
     }
+    p
+    p resolveOperatorsDown {
+      case u @ UpdateTable (EliminatedSubQuery(aliasedTable), assignments, condition) =>
+        val setExpressions = assignments.map(kv=> kv.key.sql -> kv.value).toMap
+        UpdateCommand(aliasedTable, setExpressions, condition)
+      case u @ DeleteFromTable (EliminatedSubQuery(aliasedTable), condition) =>
+        DeleteCommand(aliasedTable, condition)
+      case u @ MergeIntoTable (target, source, cond, matchedActions, notMatchedActions) =>
+
+      if (EliminatedSubQuery.unapply(target).isEmpty) {
+        u
+      } else {
+        val unaliasedTarget = EliminatedSubQuery.unapply(target).get
+        val unaliasedSource = EliminatedSubQuery.unapply(source).get
+        val targetAllias = extractAlias(target)
+        val sourceAllias = extractAlias(source)
+
+        val matched: Seq[MergeWhenClause] = matchedActions.map {
+          case DeleteAction(condition) => MergeWhenDelete(condition)
+          case UpdateAction(condition, assignments) =>
+            val setExpressions = assignments.map(kv => kv.key.sql -> kv.value).toMap
+            MergeWhenUpdateClause(condition, setExpressions, false)
+          case UpdateStarAction(condition) =>
+            MergeWhenUpdateClause(condition, Map.empty, true)
+        }
+
+        val notMatched = notMatchedActions.map {
+          case InsertAction(condition, assignments) =>
+            val setExpressions = assignments.map(_.key)
+            MergeWhenNotInsert(condition, setExpressions)
+          case InsertStarAction(condition) => MergeWhenNotInsert(condition, Seq(expr("*").expr))
+        }.headOption
+
+        MergeCommand(unaliasedTarget, unaliasedSource, matched, notMatched, MergeCondition(cond), sourceAllias, targetAllias)
+      }
+    }
   }
+
+  def extractAlias(plan: LogicalPlan) = {
+    plan match {
+      case SubqueryAlias(identifier, child) =>
+        Some(identifier)
+      case _ =>
+        None
+    }
+  }
+}
+
+object EliminatedSubQuery {
+
+  def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
+    val r = EliminateSubqueryAliases(plan)
+    r match {
+      case LogicalRelation(r: HiveAcidRelation, _, _, _) =>
+        Some(plan)
+      case _ =>
+        None
+    }
+  }
+
+
+
 }
 
 class HiveAcidAutoConvertExtension extends (SparkSessionExtensions => Unit) {
   def apply(extension: SparkSessionExtensions): Unit = {
-    extension.injectResolutionRule(HiveAcidAutoConvert.apply)
-    extension.injectParser { (session, parser) =>
-      SparkAcidSqlParser(parser)
-    }
+
+//    extension.injectParser { case (spark, parser) => SparkAcidSqlParser(parser, new SQLConf()) }
+    extension.injectResolutionRule{ spark => HiveAcidAutoConvert(spark) }
+
   }
 }

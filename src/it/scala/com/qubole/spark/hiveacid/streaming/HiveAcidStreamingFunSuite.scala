@@ -21,12 +21,13 @@
 package com.qubole.spark.hiveacid.streaming
 
 import org.apache.log4j.{Level, LogManager, Logger}
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfterAll}
+import org.scalatest.funsuite.AnyFunSuite
 
 import scala.util.control.NonFatal
 
 
-abstract class HiveAcidStreamingFunSuite extends FunSuite with BeforeAndAfterAll {
+abstract class HiveAcidStreamingFunSuite extends AnyFunSuite with BeforeAndAfterAll {
 
   protected val log: Logger = LogManager.getLogger(this.getClass)
   log.setLevel(Level.INFO)

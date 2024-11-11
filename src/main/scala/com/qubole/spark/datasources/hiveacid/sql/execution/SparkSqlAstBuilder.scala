@@ -39,7 +39,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       val key = visitTablePropertyKey(property.key)
       val value = visitTablePropertyValue(property.value)
       key -> value
-    }
+    }.toSeq
     // Check for duplicate property names.
     checkDuplicateKeys(properties, ctx)
     properties.toMap
@@ -174,18 +174,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     val targetAlias = if (ctx.targetAlias != null) {
       val alias: SubqueryAlias = aliasPlan(ctx.targetAlias, targetRelation)
       targetRelation = alias
-      Some(alias.name)
+      Some(alias.identifier)
     } else {
       None
     }
     val sourceAlias = if (ctx.sourceAlias != null) {
       val alias = aliasPlan(ctx.sourceAlias, sourceRelation)
       sourceRelation = alias
-      Some(alias.name)
+      Some(alias.identifier)
     } else {
       None
     }
-    MergeCommand(targetRelation, sourceRelation, mergeMatchedClause,
+    MergeCommand(targetRelation, sourceRelation, mergeMatchedClause.toSeq,
       mergeNotMatchedInsertClause, MergeCondition(onCondition.get),
       sourceAlias, targetAlias)
   }
@@ -284,7 +284,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       val value = expression(updateField.value)
       subqueryNotSupportedCheck(Some(value), "UPDATE")
       field -> value
-    }
+    }.toSeq
     // Check for duplicate field names.
     checkDuplicateKeys(fieldValues, ctx)
     fieldValues.toMap

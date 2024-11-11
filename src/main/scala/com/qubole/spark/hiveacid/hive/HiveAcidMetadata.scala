@@ -19,8 +19,6 @@ package com.qubole.spark.hiveacid.hive
 
 import java.lang.reflect.InvocationTargetException
 import java.util.Locale
-
-import scala.collection.JavaConversions._
 import scala.collection.mutable
 import com.qubole.shaded.hadoop.hive.conf.HiveConf
 import com.qubole.shaded.hadoop.hive.ql.io.RecordIdentifier
@@ -30,12 +28,13 @@ import com.qubole.shaded.hadoop.hive.ql.plan.TableDesc
 import com.qubole.spark.hiveacid.util.Util
 import com.qubole.spark.hiveacid.HiveAcidErrors
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.metastore.api.MetaException
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{InputFormat, OutputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
+
+import scala.collection.convert.ImplicitConversions.`collection AsScalaIterable`
 
 /**
  * Represents metadata for hive acid table and exposes API to perform operations on top of it
@@ -79,7 +78,7 @@ class HiveAcidMetadata(sparkSession: SparkSession,
 
   // Schema properties
   val dataSchema = StructType(hTable.getSd.getCols.toList.map(
-    HiveConverter.getCatalystStructField).toArray)
+    HiveConverter.getCatalystStructField))
 
   val partitionSchema = StructType(hTable.getPartitionKeys.toList.map(
     HiveConverter.getCatalystStructField).toArray)

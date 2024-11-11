@@ -10,9 +10,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from centos:6
-MAINTAINER rajkumar@qubole.com
+FROM centos:latest
 
+RUN cd /etc/yum.repos.d/
+RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
 
 RUN yum -y update
 RUN yum -y install epel-release
@@ -36,9 +38,12 @@ RUN tar -xvzf apache-hive-3.1.2-bin.tar.gz
 RUN ln -sf /apache-hive-3.1.2-bin /hive
 
 RUN yum -y install \
-    mysql-server mysql-connector-java \
-     && yum -y clean all && rm -rf /tmp/* /var/tmp/* \
-     && ln -s /usr/share/java/mysql-connector-java.jar apache-hive-3.1.2-bin/lib/mysql-connector-java.jar
+    mysql-server \
+     && yum -y clean all && rm -rf /tmp/* /var/tmp/*
+
+RUN wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-j-9.1.0.tar.gz
+RUN tar -xvzf mysql-connector-j-9.1.0.tar.gz
+RUN ln -sf /mysql-connector-j-9.1.0/mysql-connector-j-9.1.0.jar apache-hive-3.1.2-bin/lib/mysql-connector-java.jar
 
 # Setup sock proxy
 RUN yum install -y openssh openssh-clients openssh-server
@@ -48,12 +53,12 @@ RUN ssh-keygen -q -N "" -t rsa -f /root/.ssh/id_rsa
 RUN cp /root/.ssh/id_rsa.pub /root/.ssh/authorized_keys
 
 RUN chmod 755 /root && chmod 700 /root/.ssh
-RUN passwd --unlock root
+#RUN passwd --unlock root
 
 RUN yum install -y vim mlocate unzip
 
-RUN wget https://archive.apache.org/dist/hadoop/common/hadoop-2.7.0/hadoop-2.7.0.tar.gz
-RUN tar -xvzf hadoop-2.7.0.tar.gz
+#RUN wget https://archive.apache.org/dist/hadoop/common/hadoop-2.7.0/hadoop-2.7.0.tar.gz
+#RUN tar -xvzf hadoop-2.7.0.tar.gz
 
 
 # Copy configuration files
@@ -84,3 +89,5 @@ EXPOSE 3306
 
 # HDFS datnode
 EXPOSE 9866
+
+CMD ["/bin/bash", "-c", "/bootstrap.sh >/tmp/boostrap.log"]

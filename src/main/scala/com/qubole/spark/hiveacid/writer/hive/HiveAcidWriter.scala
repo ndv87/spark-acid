@@ -20,9 +20,9 @@
 package com.qubole.spark.hiveacid.writer.hive
 
 import java.util.Properties
-
 import scala.collection.JavaConverters._
-import scala.collection.mutable
+import scala.collection.{mutable}
+import scala.collection.immutable.Seq
 import com.qubole.shaded.hadoop.hive.ql.exec.FileSinkOperator.RecordWriter
 import com.qubole.shaded.hadoop.hive.ql.exec.Utilities
 import com.qubole.shaded.hadoop.hive.ql.io.{BucketCodec, HiveFileFormatUtils, RecordIdentifier, RecordUpdater, _}
@@ -56,15 +56,30 @@ abstract private[writer] class HiveAcidWriter(val options: WriterOptions,
   // create partition path. See udf `getPartitionPathString`
   // input = p1, p2, p3
   // output = Seq(Expr(p1=*), Literal(/), Expr(p2=?), Literal('/'), Expr(p3=?))
+//  private val partitionPathExpression: Expression = Concat(
+//    options.partitionColumns.zipWithIndex.flatMap { case (c, i) =>
+//      val partitionName = ScalaUDF(
+//        ExternalCatalogUtils.getPartitionPathString _,
+//        StringType,
+//        Seq(Literal(c.name), Cast(c, StringType, Option(options.timeZoneId))),
+//        Seq(true))
+//      if (i == 0) Seq(partitionName) else Seq(Literal(Path.SEPARATOR), partitionName)
+//    })
+
   private val partitionPathExpression: Expression = Concat(
     options.partitionColumns.zipWithIndex.flatMap { case (c, i) =>
       val partitionName = ScalaUDF(
         ExternalCatalogUtils.getPartitionPathString _,
         StringType,
-        Seq(Literal(c.name), Cast(c, StringType, Option(options.timeZoneId))),
-        Seq(true, true))
+        scala.Seq(Literal(c.name), Cast(c, StringType, Option(options.timeZoneId))),
+        scala.Seq.empty,
+        nullable = false
+      )
+
+      // Добавление разделителя в зависимости от индекса
       if (i == 0) Seq(partitionName) else Seq(Literal(Path.SEPARATOR), partitionName)
-    })
+    }
+  )
 
   private val getPartitionPath: InternalRow => String = {
     val proj = UnsafeProjection.create(Seq(partitionPathExpression),

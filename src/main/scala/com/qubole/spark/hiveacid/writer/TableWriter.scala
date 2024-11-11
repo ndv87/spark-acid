@@ -52,7 +52,7 @@ private[hiveacid] class TableWriter(sparkSession: SparkSession,
                                     sparkAcidConf: SparkAcidConf,
                                     statementId: Option[Int] = None) extends Logging {
 
-  private val MAX_NUMBER_OF_BUCKETS = 4096
+  private val MAX_NUMBER_OF_BUCKETS = sparkSession.conf.get("acid_max_num_buckets", "4096").toInt
 
   private def getSchema(operationType: HiveAcidOperation.OperationType): StructType = {
     val expectRowIdsInDataFrame = operationType match {

@@ -30,4 +30,14 @@ case class DeleteCommand(
     }
     Seq.empty[Row]
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    if (newChildren.size == 1) {
+      copy(table = newChildren.head)
+    } else {
+      require(newChildren.size == 2, "DeleteHiveAcidTable expects either one or two children")
+      val Seq(newTable, newRewritePlan) = newChildren.take(2)
+      copy(table = newTable)
+    }
+  }
 }

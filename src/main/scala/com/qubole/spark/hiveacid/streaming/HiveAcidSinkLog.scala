@@ -39,7 +39,7 @@ class HiveAcidSinkLog(version: Int,
 
   protected override val minBatchesToRetain = options.minBatchesToRetain
 
-  override def compactLogs(logs: Seq[HiveAcidSinkStatus]): Seq[HiveAcidSinkStatus] = {
+  def compactLogs(logs: Seq[HiveAcidSinkStatus]): Seq[HiveAcidSinkStatus] = {
     val deletedFiles = logs.filter(_.action == HiveAcidSinkLog.DELETE_ACTION).map(_.txnId).toSet
     if (deletedFiles.isEmpty) {
       logs

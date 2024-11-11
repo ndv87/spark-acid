@@ -40,7 +40,7 @@ private[hiveacid] case class HiveAcidPartitionComputer(ignoreEmptySplits: Boolea
                     inputFormat: InputFormat[K, V],
                     minPartitions: Int): Array[HiveAcidPartition] = {
     // add the credentials here as this can be called before SparkContext initialized
-    SparkHadoopUtil.get.addCredentials(jobConf)
+//    SparkHadoopUtil.get.addCredentials(jobConf)
     try {
       val allInputSplits = inputFormat.getSplits(jobConf, minPartitions)
       val inputSplits = if (ignoreEmptySplits) {

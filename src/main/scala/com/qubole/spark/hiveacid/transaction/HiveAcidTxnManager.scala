@@ -19,7 +19,6 @@ package com.qubole.spark.hiveacid.transaction
 
 import java.util.concurrent.{Executors, ScheduledExecutorService, ThreadFactory, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
-
 import com.qubole.shaded.hadoop.hive.common.{ValidTxnList, ValidTxnWriteIdList, ValidWriteIdList}
 import com.qubole.shaded.hadoop.hive.metastore.api.{DataOperationType, LockRequest, LockResponse, LockState, TxnInfo}
 import com.qubole.shaded.hadoop.hive.metastore.conf.MetastoreConf
@@ -33,7 +32,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.SqlUtils
 import com.qubole.shaded.thrift.TException
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+import scala.collection.convert.ImplicitConversions.`collection AsScalaIterable`
+import scala.jdk.CollectionConverters.IterableHasAsJava
 import scala.language.implicitConversions
 
 /**
@@ -97,7 +98,7 @@ private[hiveacid] class HiveAcidTxnManager(sparkSession: SparkSession) extends L
       HiveAcidTxnManager.activeTxns.remove(txnId)
       logInfo(s"Removing txnId: $txnId from tracker")
       if (abort) {
-        client.abortTxns(scala.collection.JavaConversions.seqAsJavaList(Seq(txnId)))
+        client.abortTxns(Seq(txnId).map(_.asInstanceOf[java.lang.Long]).toList.asJava)
       } else {
         client.commitTxn(txnId)
       }
@@ -195,7 +196,7 @@ private[hiveacid] class HiveAcidTxnManager(sparkSession: SparkSession) extends L
       case Some(id) => id
       case None => -1L
     }
-    val tableValidWriteIds = client.getValidWriteIds(Seq(fullyQualifiedTableName),
+    val tableValidWriteIds = client.getValidWriteIds(List(fullyQualifiedTableName).asJava,
       validTxnList.writeToString())
     val txnWriteIds: ValidTxnWriteIdList = TxnUtils.createValidTxnWriteIdList(txnId,
       tableValidWriteIds)
@@ -354,7 +355,7 @@ private[hiveacid] class HiveAcidTxnManager(sparkSession: SparkSession) extends L
                            partitionNames: Set[String],
                            operationType: HiveAcidOperation.OperationType): Unit = {
     client.addDynamicPartitions(txnId, writeId, dbName,
-      tableName, scala.collection.JavaConversions.seqAsJavaList(partitionNames.toSeq),
+      tableName, partitionNames.toSeq.asJava,
       convertToDataOperationType(operationType))
   }
 

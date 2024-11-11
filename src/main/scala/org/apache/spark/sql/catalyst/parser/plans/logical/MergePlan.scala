@@ -29,6 +29,8 @@ case class MergePlan(sourcePlan: LogicalPlan,
                      notMatched: Option[MergeWhenClause]) extends Command {
   override def children: Seq[LogicalPlan] = Seq(sourcePlan, targetPlan)
   override def output: Seq[Attribute] = Seq.empty
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = ???
 }
 
 object MergePlan {

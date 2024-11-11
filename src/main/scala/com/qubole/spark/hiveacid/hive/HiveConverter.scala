@@ -28,8 +28,8 @@ import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import scala.jdk.CollectionConverters._
 
-import scala.collection.JavaConversions._
 
 /**
   * Encapsulates everything (extensions, workarounds, quirks) to handle the
@@ -39,11 +39,12 @@ private[hiveacid] object HiveConverter extends Logging {
 
   def getCatalystStructField(hc: FieldSchema): StructField = {
     val columnType = getCatalystType(hc.getType)
-    val metadata = if (hc.getType != columnType.catalogString) {
-      new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
-    } else {
-      Metadata.empty
-    }
+//    val metadata = if (hc.getType != columnType.catalogString) {
+//      new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
+//    } else {
+//      Metadata.empty
+//    }
+    val metadata = Metadata.empty
 
     val field = StructField(
       name = hc.getName,
@@ -61,10 +62,10 @@ private[hiveacid] object HiveConverter extends Logging {
         throw new SparkException("Cannot recognize hive type string: " + dataType, e)
     }
   }
-
   def getHiveConf(sparkContext: SparkContext): HiveConf = {
     val hiveConf = new HiveConf()
-    (sparkContext.hadoopConfiguration.iterator().map(kv => kv.getKey -> kv.getValue)
+
+    (sparkContext.hadoopConfiguration.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
       ++ sparkContext.getConf.getAll.toMap).foreach { case (k, v) =>
       logDebug(
         s"""

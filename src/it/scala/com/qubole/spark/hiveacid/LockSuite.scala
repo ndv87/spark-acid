@@ -21,11 +21,12 @@ import com.qubole.spark.hiveacid.hive.HiveAcidMetadata
 import com.qubole.spark.hiveacid.transaction.HiveAcidTxn
 import org.apache.log4j.{Level, LogManager, Logger}
 import org.apache.spark.sql.SparkSession
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import scala.util.control.NonFatal
 
-class LockSuite extends FunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
+class LockSuite extends AnyFunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
   val log: Logger = LogManager.getLogger(this.getClass)
   log.setLevel(Level.INFO)
 

@@ -17,22 +17,26 @@
 
 package com.qubole.spark.hiveacid
 
-import com.qubole.spark.hiveacid.datasource.HiveAcidDataSource
+import com.qubole.spark.hiveacid.datasource.{HiveAcidDataSource, HiveAcidRelation}
 import com.qubole.spark.hiveacid.hive.HiveAcidMetadata
 import com.qubole.spark.hiveacid.merge.{MergeImpl, MergeWhenClause, MergeWhenNotInsert}
+import com.qubole.spark.hiveacid.rdd.EmptyRDD
 import com.qubole.spark.hiveacid.reader.TableReader
 import com.qubole.spark.hiveacid.transaction._
 import com.qubole.spark.hiveacid.writer.TableWriter
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.AliasIdentifier
+import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
 import org.apache.spark.sql.catalyst.parser.plans.logical.MergePlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.{Column, DataFrame, SparkSession, SqlUtils, _}
 
 import scala.collection.JavaConverters._
+import scala.util.{Failure, Success, Try}
 
 
 
@@ -173,20 +177,27 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
     } else {
       parameters
     }
-    sparkSession.read.format(HiveAcidDataSource.NAME)
+
+    val df = sparkSession.read.format(HiveAcidDataSource.NAME)
       .options(options)
       .load()
+
+    Try(df.head()) match {
+      case Failure(exception) if exception.getMessage.contains("does not exist") =>
+        sparkSession.createDataFrame(sparkSession.sparkContext.emptyRDD[Row], df.schema)
+      case Success(_) => df
+    }
   }
 
   /**
-    * Return df after after applying update clause and filter clause. This df is used to
+    * Return df after applying update clause and filter clause. This df is used to
     * update the table.
     * @param condition - condition string to identify rows which needs to be updated
     * @param newValues - Map of (column, value) to set
     */
   private def updateDF(condition: Option[String], newValues: Map[String, String]): DataFrame = {
     val conditionColumn = condition.map(functions.expr)
-    val newValMap = newValues.mapValues(value => functions.expr(value))
+    val newValMap = newValues.mapValues(value => functions.expr(value)).toMap
     updateDFInternal(conditionColumn, newValMap)
   }
 
@@ -208,7 +219,6 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
         k.toLowerCase -> functions.expr(SqlUtils.resolveReferences(sparkSession, v.expr,
           qualifiedPlan, failIfUnresolved = false).sql)}.toMap
     }
-
     val strColumnMap = toStrColumnMap(newValues)
     val updateColumns = strColumnMap.keys
     val resolver = sparkSession.sessionState.conf.resolver
@@ -237,8 +247,9 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
 
     condition match {
       case Some(cond) =>
+        val condNoCatalog = expr(cond.expr.sql.replaceAll(s"spark_catalog\\.${hiveAcidMetadata.fullyQualifiedName}\\.", "")).expr
         val resolvedExpr = SqlUtils.resolveReferences(sparkSession,
-          cond.expr,
+          condNoCatalog,
           qualifiedPlan, failIfUnresolved = false)
         resolvedDf.filter(resolvedExpr.sql).select(outputColumns: _*)
       case None =>
@@ -315,8 +326,11 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
     checkForSupport(HiveAcidOperation.DELETE)
     val (qualifiedPlan: LogicalPlan, resolvedDf: DataFrame) =
       SqlUtils.getDFQualified(sparkSession, readDF(true), hiveAcidMetadata.fullyQualifiedName)
+
+    val condNoCatalog = expr(condition.expr.sql.replaceAll(s"spark_catalog\\.${hiveAcidMetadata.fullyQualifiedName}\\.", "")).expr
+
     val resolvedExpr = SqlUtils.resolveReferences(sparkSession,
-      condition.expr,
+      condNoCatalog,
       qualifiedPlan, failIfUnresolved = false)
     val tableWriter = new TableWriter(sparkSession, curTxn, hiveAcidMetadata, sparkAcidConfig)
     tableWriter.process(HiveAcidOperation.DELETE, resolvedDf.filter(resolvedExpr.sql))
@@ -440,6 +454,8 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
       hiveAcidMetadata.fullyQualifiedName)
     val sourcePlan = getPlan(sourceDf, sourceAlias, isTarget = false)
     val targetPlan = getPlan(targetDf, targetAlias, isTarget = true)
+
+
     val mergeImpl = new MergeImpl(sparkSession, hiveAcidMetadata, this, sourceDf, targetDf,
       new MergePlan(sourcePlan, targetPlan, mergeExpression, matchedClause, notMatched), curTxn)
     mergeImpl.run()

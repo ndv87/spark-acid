@@ -3,6 +3,7 @@ package com.qubole.spark.datasources.hiveacid.sql.execution
 import com.qubole.spark.datasources.hiveacid.sql.catalyst.parser._
 import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.atn.PredictionMode
+import org.apache.iceberg.common.DynConstructors
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -17,7 +18,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 /**
  * Concrete parser for Hive SQL statements.
  */
-case class SparkAcidSqlParser(sparkParser: ParserInterface) extends ParserInterface with Logging {
+case class SparkAcidSqlParser(sparkParser: ParserInterface, conf: SQLConf ) extends ParserInterface with Logging {
 
   override def parseExpression(sqlText: String): Expression = sparkParser.parseExpression(sqlText)
 
@@ -29,32 +30,35 @@ case class SparkAcidSqlParser(sparkParser: ParserInterface) extends ParserInterf
 
   override def parseDataType(sqlText: String): DataType = sparkParser.parseDataType(sqlText)
 
-  private val substitutor: VariableSubstitution = {
-    val field = classOf[SparkSqlParser].getDeclaredField("substitutor")
-    field.setAccessible(true)
-    field.get(sparkParser).asInstanceOf[VariableSubstitution]
-  }
+  private val substitutorCtor: DynConstructors.Ctor[VariableSubstitution] =
+    DynConstructors.builder()
+      .impl(classOf[VariableSubstitution])
+      .impl(classOf[VariableSubstitution], classOf[SQLConf])
+      .build()
 
-  // FIXME scala reflection would be better
-  private val conf: SQLConf = {
-    val field = classOf[VariableSubstitution].getDeclaredField("org$apache$spark$sql$internal$VariableSubstitution$$conf")
-    field.setAccessible(true)
-    field.get(substitutor).asInstanceOf[SQLConf]
-  }
+  private lazy val substitutor = substitutorCtor.newInstance(SQLConf.get)
+
 
   private val sparkAcidAstBuilder = new SparkSqlAstBuilder(conf)
 
   override def parsePlan(sqlText: String): LogicalPlan = {
+//    sparkParser.parsePlan(sqlText)
     try {
       parse(sqlText) { parser =>
         sparkAcidAstBuilder.visitSingleStatement(parser.singleStatement()) match {
-          case plan: LogicalPlan => plan
-          case _ => sparkParser.parsePlan(sqlText)
+          case plan: LogicalPlan =>
+            val x = plan
+            x
+          case _ =>
+            val x = sparkParser.parsePlan(sqlText)
+            x
         }
       }
     } catch {
-      case e: AcidParseException => throw e.parseException
-      case _: ParseException => sparkParser.parsePlan(sqlText)
+      case e: AcidParseException =>
+        throw e.parseException
+      case _: ParseException =>
+        sparkParser.parsePlan(sqlText)
     }
   }
 
@@ -114,4 +118,8 @@ case class SparkAcidSqlParser(sparkParser: ParserInterface) extends ParserInterf
       case _ => false
     }
   }
+
+  override def parseMultipartIdentifier(sqlText: String): Seq[String] = sparkParser.parseMultipartIdentifier(sqlText)
+
+  override def parseQuery(sqlText: String): LogicalPlan = parsePlan(sqlText)
 }

@@ -2,9 +2,9 @@ package com.qubole.spark.datasources.hiveacid.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
 import java.util.Locale
-
 import com.qubole.spark.datasources.hiveacid.sql.catalyst.parser.SqlHiveParser._
 import com.qubole.spark.datasources.hiveacid.sql.catalyst.parser.{SqlHiveParser => SqlBaseParser}
+
 import javax.xml.bind.DatatypeConverter
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
@@ -17,6 +17,7 @@ import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -28,6 +29,7 @@ import scala.collection.mutable.ArrayBuffer
  * An adaptation of [[org.apache.spark.sql.catalyst.parser.AstBuilder]]
  */
 class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging {
+
   import ParserUtils._
 
   def this() = this(new SQLConf())
@@ -61,18 +63,46 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
   /**
    * Create a top-level plan with Common Table Expressions.
    */
-  override def visitQuery(ctx: QueryContext): LogicalPlan = withOrigin(ctx) {
-    val query = plan(ctx.queryNoWith)
+  //  override def visitQuery(ctx: QueryContext): LogicalPlan = withOrigin(ctx) {
+  //    val query = plan(ctx.queryNoWith)
+  //
+  //    // Apply CTEs
+  //    query.optional(ctx.ctes) {
+  //      val ctes = ctx.ctes.namedQuery.asScala.map { nCtx =>
+  //        val namedQuery = visitNamedQuery(nCtx)
+  //        (namedQuery.alias, namedQuery)
+  //      }.toSeq
+  //      // Check for duplicate names.
+  //      checkDuplicateKeys(ctes, ctx)
+  //      With(query, ctes)
+  //    }
+  //  }
 
-    // Apply CTEs
-    query.optional(ctx.ctes) {
+  override def visitQuery(ctx: QueryContext): LogicalPlan = withOrigin(ctx) {
+    val query = plan(ctx.queryNoWith) // Парсим основной запрос без CTE
+
+    if (ctx.ctes != null) {
+      // Обрабатываем CTE, получаем их в виде именованных подзапросов
       val ctes = ctx.ctes.namedQuery.asScala.map { nCtx =>
-        val namedQuery = visitNamedQuery(nCtx)
-        (namedQuery.alias, namedQuery)
-      }
-      // Check for duplicate names.
+        val namedQuery = visitNamedQuery(nCtx) // Логический план для CTE
+        val alias = namedQuery.alias // Получаем alias (имя) для CTE
+        // Создаём подзапрос с alias
+        (alias, SubqueryAlias(alias, namedQuery))
+      }.toSeq
+
+      // Проверка на дублирующиеся имена CTE
       checkDuplicateKeys(ctes, ctx)
-      With(query, ctes)
+
+      // Обрабатываем основной запрос с CTE
+      // Включаем CTE в основной запрос, подставляя их как алиасы
+      ctes.foldLeft(query) { case (baseQuery, (alias, subquery)) =>
+        // Для каждого CTE добавляем его в основной запрос
+        // Возвращаем новый запрос с добавленными CTE
+        SubqueryAlias(alias, baseQuery)
+      }
+    } else {
+      // Если CTE отсутствуют, возвращаем основной запрос
+      query
     }
   }
 
@@ -102,25 +132,25 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * clauses determine the shape (ordering/partitioning/rows) of the query result.
    */
   private def withQueryResultClauses(
-      ctx: QueryOrganizationContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+                                      ctx: QueryOrganizationContext,
+                                      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     import ctx._
 
     // Handle ORDER BY, SORT BY, DISTRIBUTE BY, and CLUSTER BY clause.
     val withOrder = if (
       !order.isEmpty && sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
       // ORDER BY ...
-      Sort(order.asScala.map(visitSortItem), global = true, query)
+      Sort(order.asScala.map(visitSortItem).toSeq, global = true, query)
     } else if (order.isEmpty && !sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
       // SORT BY ...
-      Sort(sort.asScala.map(visitSortItem), global = false, query)
+      Sort(sort.asScala.map(visitSortItem).toSeq, global = false, query)
     } else if (order.isEmpty && sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
       // DISTRIBUTE BY ...
       withRepartitionByExpression(ctx, expressionList(distributeBy), query)
     } else if (order.isEmpty && !sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
       // SORT BY ... DISTRIBUTE BY ...
       Sort(
-        sort.asScala.map(visitSortItem),
+        sort.asScala.map(visitSortItem).toSeq,
         global = false,
         withRepartitionByExpression(ctx, expressionList(distributeBy), query))
     } else if (order.isEmpty && sort.isEmpty && distributeBy.isEmpty && !clusterBy.isEmpty) {
@@ -152,9 +182,9 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Create a clause for DISTRIBUTE BY.
    */
   protected def withRepartitionByExpression(
-      ctx: QueryOrganizationContext,
-      expressions: Seq[Expression],
-      query: LogicalPlan): LogicalPlan = {
+                                             ctx: QueryOrganizationContext,
+                                             expressions: Seq[Expression],
+                                             query: LogicalPlan): LogicalPlan = {
     throw new ParseException("DISTRIBUTE BY is not supported", ctx)
   }
 
@@ -162,7 +192,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Create a logical plan using a query specification.
    */
   override def visitQuerySpecification(
-      ctx: QuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
+                                        ctx: QuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
     val from = OneRowRelation().optional(ctx.fromClause) {
       visitFromClause(ctx.fromClause)
     }
@@ -177,8 +207,8 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Note that query hints are ignored (both by the parser and the builder).
    */
   private def withQuerySpecification(
-      ctx: QuerySpecificationContext,
-      relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+                                      ctx: QuerySpecificationContext,
+                                      relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     import ctx._
 
     // WHERE
@@ -215,14 +245,20 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
             AttributeReference("value", StringType)()), true)
         }
 
+        val scriptIO = withScriptIOSchema(ctx, inRowFormat, recordWriter, outRowFormat, recordReader, schemaLess)
+
         // Create the transform.
         ScriptTransformation(
-          expressions,
           string(script),
           attributes,
           withFilter,
-          withScriptIOSchema(
-            ctx, inRowFormat, recordWriter, outRowFormat, recordReader, schemaLess))
+          scriptIO)
+      //        ScriptTransformation(
+      //          expressions,
+      //          string(script),
+      //          attributes,
+      //          withFilter,
+      //          scriptIO)
 
       case SqlBaseParser.SELECT =>
         // Regular select
@@ -276,12 +312,12 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Create a (Hive based) [[ScriptInputOutputSchema]].
    */
   protected def withScriptIOSchema(
-      ctx: QuerySpecificationContext,
-      inRowFormat: RowFormatContext,
-      recordWriter: Token,
-      outRowFormat: RowFormatContext,
-      recordReader: Token,
-      schemaLess: Boolean): ScriptInputOutputSchema = {
+                                    ctx: QuerySpecificationContext,
+                                    inRowFormat: RowFormatContext,
+                                    recordWriter: Token,
+                                    outRowFormat: RowFormatContext,
+                                    recordReader: Token,
+                                    schemaLess: Boolean): ScriptInputOutputSchema = {
     throw new ParseException("Script Transform is not supported", ctx)
   }
 
@@ -292,7 +328,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
   override def visitFromClause(ctx: FromClauseContext): LogicalPlan = withOrigin(ctx) {
     val from = ctx.relation.asScala.foldLeft(null: LogicalPlan) { (left, relation) =>
       val right = plan(relation.relationPrimary)
-      val join = right.optionalMap(left)(Join(_, _, Inner, None))
+      val join = right.optionalMap(left)(Join(_, _, Inner, None, JoinHint.NONE))
       withJoinRelations(join, relation)
     }
     if (ctx.pivotClause() != null) {
@@ -342,8 +378,8 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Add a [[WithWindowDefinition]] operator to a logical plan.
    */
   private def withWindows(
-      ctx: WindowsContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+                           ctx: WindowsContext,
+                           query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Collect all window specifications defined in the WINDOW clause.
     val baseWindowMap = ctx.namedWindow.asScala.map {
       wCtx =>
@@ -369,45 +405,46 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
 
     // Note that mapValues creates a view instead of materialized map. We force materialization by
     // mapping over identity.
-    WithWindowDefinition(windowMapView.map(identity), query)
+    WithWindowDefinition(windowMapView.map(identity).toMap, query)
   }
 
   /**
    * Add an [[Aggregate]] or [[GroupingSets]] to a logical plan.
    */
   private def withAggregation(
-      ctx: AggregationContext,
-      selectExpressions: Seq[NamedExpression],
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+                               ctx: AggregationContext,
+                               selectExpressions: Seq[NamedExpression],
+                               query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val groupByExpressions = expressionList(ctx.groupingExpressions)
 
-    if (ctx.GROUPING != null) {
-      // GROUP BY .... GROUPING SETS (...)
-      val selectedGroupByExprs =
-        ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)))
-      GroupingSets(selectedGroupByExprs, groupByExpressions, query, selectExpressions)
-    } else {
-      // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
-      val mappedGroupByExpressions = if (ctx.CUBE != null) {
-        Seq(Cube(groupByExpressions))
-      } else if (ctx.ROLLUP != null) {
-        Seq(Rollup(groupByExpressions))
-      } else {
-        groupByExpressions
-      }
-      Aggregate(mappedGroupByExpressions, selectExpressions, query)
-    }
+//    if (ctx.GROUPING != null) {
+//      // GROUP BY .... GROUPING SETS (...)
+//      val selectedGroupByExprs =
+//        ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)))
+//      GroupingSets(selectedGroupByExprs, groupByExpressions, query, selectExpressions)
+//    } else {
+//      // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
+//      val mappedGroupByExpressions = if (ctx.CUBE != null) {
+//        Seq(Cube(groupByExpressions))
+//      } else if (ctx.ROLLUP != null) {
+//        Seq(Rollup(groupByExpressions))
+//      } else {
+//        groupByExpressions
+//      }
+//      Aggregate(mappedGroupByExpressions, selectExpressions, query)
+//    }
+    ???
   }
 
   /**
    * Add [[UnresolvedHint]]s to a logical plan.
    */
   private def withHints(
-      ctx: HintContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+                         ctx: HintContext,
+                         query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     var plan = query
     ctx.hintStatements.asScala.reverse.foreach { case stmt =>
-      plan = UnresolvedHint(stmt.hintName.getText, stmt.parameters.asScala.map(expression), plan)
+      plan = UnresolvedHint(stmt.hintName.getText, stmt.parameters.asScala.map(expression).toSeq, plan)
     }
     plan
   }
@@ -416,8 +453,8 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Add a [[Pivot]] to a logical plan.
    */
   private def withPivot(
-      ctx: PivotClauseContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+                         ctx: PivotClauseContext,
+                         query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val aggregates = Option(ctx.aggregates).toSeq
       .flatMap(_.namedExpression.asScala)
       .map(typedVisit[Expression])
@@ -426,9 +463,9 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
     } else {
       CreateStruct(
         ctx.pivotColumn.identifiers.asScala.map(
-          identifier => UnresolvedAttribute.quoted(identifier.getText)))
+          identifier => UnresolvedAttribute.quoted(identifier.getText)).toSeq)
     }
-    val pivotValues = ctx.pivotValues.asScala.map(visitPivotValue)
+    val pivotValues = ctx.pivotValues.asScala.map(visitPivotValue).toSeq
     Pivot(None, pivotColumn, pivotValues, aggregates, query)
   }
 
@@ -448,15 +485,15 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Add a [[Generate]] (Lateral View) to a logical plan.
    */
   private def withGenerate(
-      query: LogicalPlan,
-      ctx: LateralViewContext): LogicalPlan = withOrigin(ctx) {
+                            query: LogicalPlan,
+                            ctx: LateralViewContext): LogicalPlan = withOrigin(ctx) {
     val expressions = expressionList(ctx.expression)
     Generate(
       UnresolvedGenerator(visitFunctionName(ctx.qualifiedName), expressions),
       unrequiredChildIndex = Nil,
       outer = ctx.OUTER != null,
       Some(ctx.tblName.getText.toLowerCase),
-      ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply),
+      ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply).toSeq,
       query)
   }
 
@@ -491,7 +528,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
         // Resolve the join type and join condition
         val (joinType, condition) = Option(join.joinCriteria) match {
           case Some(c) if c.USING != null =>
-            (UsingJoin(baseJoinType, c.identifier.asScala.map(_.getText)), None)
+            (UsingJoin(baseJoinType, c.identifier.asScala.map(_.getText).toSeq), None)
           case Some(c) if c.booleanExpression != null =>
             (baseJoinType, Option(expression(c.booleanExpression)))
           case None if join.NATURAL != null =>
@@ -502,7 +539,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
           case None =>
             (baseJoinType, None)
         }
-        Join(left, plan(join.right), joinType, condition)
+        Join(left, plan(join.right), joinType, condition, JoinHint.NONE)
       }
     }
   }
@@ -526,7 +563,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
       validate(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
         s"Sampling fraction ($fraction) must be on interval [0, 1]",
         ctx)
-      Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, query)
+      Sample(0.0, fraction, withReplacement = false, (math.random() * 1000).toInt, query)
     }
 
     if (ctx.sampleMethod() == null) {
@@ -598,7 +635,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Create a table-valued function call with arguments, e.g. range(1000)
    */
   override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
-      : LogicalPlan = withOrigin(ctx) {
+  : LogicalPlan = withOrigin(ctx) {
     val func = ctx.functionTable
     val aliases = if (func.tableAlias.identifierList != null) {
       visitIdentifierList(func.tableAlias.identifierList)
@@ -607,7 +644,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
     }
 
     val tvf = UnresolvedTableValuedFunction(
-      func.identifier.getText, func.expression.asScala.map(expression), aliases)
+      func.identifier.getText, func.expression.asScala.map(expression).toSeq, aliases)
     tvf.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
   }
 
@@ -622,7 +659,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
         // style 1: values (1), (2), (3)  -- multiple columns are supported
         // style 2: values 1, 2, 3  -- only a single column is supported here
         case struct: CreateNamedStruct => struct.valExprs // style 1
-        case child => Seq(child)                          // style 2
+        case child => Seq(child) // style 2
       }
     }
 
@@ -632,7 +669,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
       Seq.tabulate(rows.head.size)(i => s"col${i + 1}")
     }
 
-    val table = UnresolvedInlineTable(aliases, rows)
+    val table = UnresolvedInlineTable(aliases, rows.toSeq)
     table.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
   }
 
@@ -706,23 +743,25 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Create a Sequence of Strings for an identifier list.
    */
   override def visitIdentifierSeq(ctx: IdentifierSeqContext): Seq[String] = withOrigin(ctx) {
-    ctx.identifier.asScala.map(_.getText)
+    ctx.identifier.asScala.map(_.getText).toSeq
   }
 
   /* ********************************************************************************************
    * Table Identifier parsing
    * ******************************************************************************************** */
+
   /**
    * Create a [[TableIdentifier]] from a 'tableName' or 'databaseName'.'tableName' pattern.
    */
   override def visitTableIdentifier(
-      ctx: TableIdentifierContext): TableIdentifier = withOrigin(ctx) {
+                                     ctx: TableIdentifierContext): TableIdentifier = withOrigin(ctx) {
     TableIdentifier(ctx.table.getText, Option(ctx.db).map(_.getText))
   }
 
   /* ********************************************************************************************
    * Expression parsing
    * ******************************************************************************************** */
+
   /**
    * Create an expression from the given context. This method just passes the context on to the
    * visitor and only takes care of typing (We assume that the visitor returns an Expression here).
@@ -733,7 +772,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Create sequence of expressions from the given sequence of contexts.
    */
   private def expressionList(trees: java.util.List[ExpressionContext]): Seq[Expression] = {
-    trees.asScala.map(expression)
+    trees.asScala.map(expression).toSeq
   }
 
   /**
@@ -741,7 +780,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Both un-targeted (global) and targeted aliases are supported.
    */
   override def visitStar(ctx: StarContext): Expression = withOrigin(ctx) {
-    UnresolvedStar(Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText)))
+    UnresolvedStar(Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText).toSeq))
   }
 
   /**
@@ -776,6 +815,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
     // Collect all similar left hand contexts.
     val contexts = ArrayBuffer(ctx.right)
     var current = ctx.left
+
     def collectContexts: Boolean = current match {
       case lbc: LogicalBinaryContext if lbc.operator.getType == expressionType =>
         contexts += lbc.right
@@ -785,6 +825,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
         contexts += current
         false
     }
+
     while (collectContexts) {
       // No body - all updates take place in the collectContexts.
     }
@@ -805,6 +846,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
           reduceToExpressionTree(low, mid),
           reduceToExpressionTree(mid + 1, high))
     }
+
     reduceToExpressionTree(0, expressions.size - 1)
   }
 
@@ -902,9 +944,9 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.IN if ctx.query != null =>
         invertIfNotDefined(InSubquery(getValueExpressions(e), ListQuery(plan(ctx.query))))
       case SqlBaseParser.IN =>
-        invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
+        invertIfNotDefined(In(e, ctx.expression.asScala.map(expression).toSeq))
       case SqlBaseParser.LIKE =>
-        invertIfNotDefined(Like(e, expression(ctx.pattern)))
+        invertIfNotDefined(Like(e, expression(ctx.pattern), '\\'))
       case SqlBaseParser.RLIKE =>
         invertIfNotDefined(RLike(e, expression(ctx.pattern)))
       case SqlBaseParser.NULL if ctx.NOT != null =>
@@ -986,7 +1028,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Create a [[CreateStruct]] expression.
    */
   override def visitStruct(ctx: StructContext): Expression = withOrigin(ctx) {
-    CreateStruct(ctx.argument.asScala.map(expression))
+    CreateStruct(ctx.argument.asScala.map(expression).toSeq)
   }
 
   /**
@@ -994,7 +1036,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    */
   override def visitFirst(ctx: FirstContext): Expression = withOrigin(ctx) {
     val ignoreNullsExpr = ctx.IGNORE != null
-    First(expression(ctx.expression), Literal(ignoreNullsExpr)).toAggregateExpression()
+    First(expression(ctx.expression), ignoreNullsExpr).toAggregateExpression()
   }
 
   /**
@@ -1002,7 +1044,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    */
   override def visitLast(ctx: LastContext): Expression = withOrigin(ctx) {
     val ignoreNullsExpr = ctx.IGNORE != null
-    Last(expression(ctx.expression), Literal(ignoreNullsExpr)).toAggregateExpression()
+    Last(expression(ctx.expression), ignoreNullsExpr).toAggregateExpression()
   }
 
   /**
@@ -1045,8 +1087,8 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
     def replaceFunctions(
-        funcID: FunctionIdentifier,
-        ctx: FunctionCallContext): FunctionIdentifier = {
+                          funcID: FunctionIdentifier,
+                          ctx: FunctionCallContext): FunctionIdentifier = {
       val opt = ctx.trimOption
       if (opt != null) {
         if (ctx.qualifiedName.getText.toLowerCase(Locale.ROOT) != "trim") {
@@ -1064,6 +1106,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
         funcID
       }
     }
+
     // Create the function call.
     val name = ctx.qualifiedName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
@@ -1076,7 +1119,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
         expressions
     }
     val funcId = replaceFunctions(visitFunctionName(ctx.qualifiedName), ctx)
-    val function = UnresolvedFunction(funcId, arguments, isDistinct)
+    val function = UnresolvedFunction(funcId, arguments.toSeq, isDistinct)
 
 
     // Check if the function is evaluated in a windowed context.
@@ -1094,8 +1137,8 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    */
   protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
     ctx.identifier().asScala.map(_.getText) match {
-      case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
-      case Seq(fn) => FunctionIdentifier(fn, None)
+      case Seq(db: String, fn: String) => FunctionIdentifier(fn, Option(db))
+      case Seq(fn: String) => FunctionIdentifier(fn, None)
       case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
     }
   }
@@ -1107,7 +1150,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
     val arguments = ctx.IDENTIFIER().asScala.map { name =>
       UnresolvedAttribute.quoted(name.getText)
     }
-    LambdaFunction(expression(ctx.expression), arguments)
+    LambdaFunction(expression(ctx.expression), arguments.toSeq)
   }
 
   /**
@@ -1122,8 +1165,8 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    */
   override def visitWindowDef(ctx: WindowDefContext): WindowSpecDefinition = withOrigin(ctx) {
     // CLUSTER BY ... | PARTITION BY ... ORDER BY ...
-    val partition = ctx.partition.asScala.map(expression)
-    val order = ctx.sortItem.asScala.map(visitSortItem)
+    val partition = ctx.partition.asScala.map(expression).toSeq
+    val order = ctx.sortItem.asScala.map(visitSortItem).toSeq
 
     // RANGE/ROWS BETWEEN ...
     val frameSpecOption = Option(ctx.windowFrame).map { frame =>
@@ -1172,14 +1215,14 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Create a [[CreateStruct]] expression.
    */
   override def visitRowConstructor(ctx: RowConstructorContext): Expression = withOrigin(ctx) {
-    CreateStruct(ctx.namedExpression().asScala.map(expression))
+    CreateStruct(ctx.namedExpression().asScala.map(expression).toSeq)
   }
 
   /**
    * Create a [[ScalarSubquery]] expression.
    */
   override def visitSubqueryExpression(
-      ctx: SubqueryExpressionContext): Expression = withOrigin(ctx) {
+                                        ctx: SubqueryExpressionContext): Expression = withOrigin(ctx) {
     ScalarSubquery(plan(ctx.query))
   }
 
@@ -1198,7 +1241,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
     val branches = ctx.whenClause.asScala.map { wCtx =>
       (EqualTo(e, expression(wCtx.condition)), expression(wCtx.result))
     }
-    CaseWhen(branches, Option(ctx.elseExpression).map(expression))
+    CaseWhen(branches.toSeq, Option(ctx.elseExpression).map(expression))
   }
 
   /**
@@ -1212,12 +1255,12 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * }}}
    *
    * @param ctx the parse tree
-   *    */
+   * */
   override def visitSearchedCase(ctx: SearchedCaseContext): Expression = withOrigin(ctx) {
     val branches = ctx.whenClause.asScala.map { wCtx =>
       (expression(wCtx.condition), expression(wCtx.result))
     }
-    CaseWhen(branches, Option(ctx.elseExpression).map(expression))
+    CaseWhen(branches.toSeq, Option(ctx.elseExpression).map(expression))
   }
 
   /**
@@ -1242,7 +1285,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
   override def visitDereference(ctx: DereferenceContext): Expression = withOrigin(ctx) {
     val attr = ctx.fieldName.getText
     expression(ctx.base) match {
-      case unresolved_attr @ UnresolvedAttribute(nameParts) =>
+      case unresolved_attr@UnresolvedAttribute(nameParts) =>
         ctx.fieldName.getStart.getText match {
           case escapedIdentifier(columnNameRegex)
             if conf.supportQuotedRegexColumnName && canApplyRegex(ctx) =>
@@ -1283,7 +1326,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * visitor cannot automatically convert the nested context into an expression.
    */
   override def visitParenthesizedExpression(
-     ctx: ParenthesizedExpressionContext): Expression = withOrigin(ctx) {
+                                             ctx: ParenthesizedExpressionContext): Expression = withOrigin(ctx) {
     expression(ctx.expression)
   }
 
@@ -1303,7 +1346,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
     } else {
       direction.defaultNullOrdering
     }
-    SortOrder(expression(ctx.expression), direction, nullOrdering, Set.empty)
+    SortOrder(expression(ctx.expression), direction, nullOrdering, Seq.empty)
   }
 
   /**
@@ -1360,9 +1403,9 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
   override def visitIntegerLiteral(ctx: IntegerLiteralContext): Literal = withOrigin(ctx) {
     BigDecimal(ctx.getText) match {
       case v if v.isValidInt =>
-        Literal(v.intValue())
+        Literal(v.intValue)
       case v if v.isValidLong =>
-        Literal(v.longValue())
+        Literal(v.longValue)
       case v => Literal(v.underlying())
     }
   }
@@ -1376,8 +1419,8 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
 
   /** Create a numeric literal expression. */
   private def numericLiteral
-      (ctx: NumberContext, minValue: BigDecimal, maxValue: BigDecimal, typeName: String)
-      (converter: String => Any): Literal = withOrigin(ctx) {
+  (ctx: NumberContext, minValue: BigDecimal, maxValue: BigDecimal, typeName: String)
+  (converter: String => Any): Literal = withOrigin(ctx) {
     val rawStrippedQualifier = ctx.getText.substring(0, ctx.getText.length - 1)
     try {
       val rawBigDecimal = BigDecimal(rawStrippedQualifier)
@@ -1460,9 +1503,9 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * unit value pairs, for instance: interval 2 months 2 days.
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
-    val intervals = ctx.intervalField.asScala.map(visitIntervalField)
+    val intervals = ctx.intervalField.asScala.map(visitIntervalField).toSeq
     validate(intervals.nonEmpty, "at least one time unit should be given for interval literal", ctx)
-    Literal(intervals.reduce(_.add(_)))
+    Literal(intervals.map(interval => expr(interval.toString)).reduce(_ + _))
   }
 
   /**
@@ -1473,19 +1516,32 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    */
   override def visitIntervalField(ctx: IntervalFieldContext): CalendarInterval = withOrigin(ctx) {
     import ctx._
+
     val s = value.getText
     try {
+
       val unitText = unit.getText.toLowerCase(Locale.ROOT)
       val interval = (unitText, Option(to).map(_.getText.toLowerCase(Locale.ROOT))) match {
+        // Обработка множественного числа: например "years", "months"
         case (u, None) if u.endsWith("s") =>
-          // Handle plural forms, e.g: yearS/monthS/weekS/dayS/hourS/minuteS/hourS/...
-          CalendarInterval.fromSingleUnitString(u.substring(0, u.length - 1), s)
+          // Убираем "s" и создаем CalendarInterval
+          createCalendarInterval(u.substring(0, u.length - 1), ctx)
+
+        // Обработка одиночной формы интервала: например "year", "month", "day"
         case (u, None) =>
-          CalendarInterval.fromSingleUnitString(u, s)
+          createCalendarInterval(u, ctx)
+
+        // Преобразование интервала "year" -> "month"
         case ("year", Some("month")) =>
-          CalendarInterval.fromYearMonthString(s)
+          // Пример: 1 год это 12 месяцев
+          new CalendarInterval(12, 0, 0)
+
+        // Преобразование интервала "day" -> "second"
         case ("day", Some("second")) =>
-          CalendarInterval.fromDayTimeString(s)
+          // Пример: 1 день = 86400 секунд (миллисекунды)
+          new CalendarInterval(0, 1, 86400L * 1000000L)
+
+        // Обработка неподдерживаемых интервалов
         case (from, Some(t)) =>
           throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
       }
@@ -1500,14 +1556,29 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
     }
   }
 
+
+  def createCalendarInterval(unit: String, ctx: IntervalFieldContext): CalendarInterval = {
+    unit match {
+      case "year" => new CalendarInterval(12, 0, 0) // 1 год = 12 месяцев
+      case "month" => new CalendarInterval(1, 0, 0) // 1 месяц
+      case "day" => new CalendarInterval(0, 1, 0) // 1 день
+      case "hour" => new CalendarInterval(0, 0, 3600L * 1000000L) // 1 час = 3600 секунд
+      case "minute" => new CalendarInterval(0, 0, 60L * 1000000L) // 1 минута = 60 секунд
+      case "second" => new CalendarInterval(0, 0, 1L * 1000000L) // 1 секунда = 1 миллион микросекунд
+      case _ => throw new ParseException(s"Unsupported interval unit: $unit", ctx)
+    }
+  }
+
   /* ********************************************************************************************
    * DataType parsing
    * ******************************************************************************************** */
+
   /**
    * Create a Spark DataType.
    */
   private def visitSparkDataType(ctx: DataTypeContext): DataType = {
-    HiveStringType.replaceCharType(typedVisit(ctx))
+    //    HiveStringType.replaceCharType(typedVisit(ctx))
+    ???
   }
 
   /**
@@ -1564,7 +1635,7 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Create a [[StructType]] from a number of column definitions.
    */
   override def visitColTypeList(ctx: ColTypeListContext): Seq[StructField] = withOrigin(ctx) {
-    ctx.colType().asScala.map(visitColType)
+    ctx.colType().asScala.map(visitColType).toSeq
   }
 
   /**
@@ -1579,17 +1650,19 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
       builder.putString("comment", string(STRING))
     }
     // Add Hive type string to metadata.
-    val rawDataType = typedVisit[DataType](ctx.dataType)
-    val cleanedDataType = HiveStringType.replaceCharType(rawDataType)
-    if (rawDataType != cleanedDataType) {
-      builder.putString(HIVE_TYPE_STRING, rawDataType.catalogString)
-    }
+//    val rawDataType = typedVisit[DataType](ctx.dataType)
+//    val cleanedDataType = HiveStringType.replaceCharType(rawDataType)
+//    if (rawDataType != cleanedDataType) {
+//      builder.putString(HIVE_TYPE_STRING, rawDataType.catalogString)
+//    }
+//
+//    StructField(
+//      identifier.getText,
+//      cleanedDataType,
+//      nullable = true,
+//      builder.build())
 
-    StructField(
-      identifier.getText,
-      cleanedDataType,
-      nullable = true,
-      builder.build())
+    ???
   }
 
   /**
@@ -1603,8 +1676,8 @@ class AstBuilder(conf: SQLConf) extends SqlHiveBaseVisitor[AnyRef] with Logging 
    * Create a [[StructType]] from a number of column definitions.
    */
   override def visitComplexColTypeList(
-      ctx: ComplexColTypeListContext): Seq[StructField] = withOrigin(ctx) {
-    ctx.complexColType().asScala.map(visitComplexColType)
+                                        ctx: ComplexColTypeListContext): Seq[StructField] = withOrigin(ctx) {
+    ctx.complexColType().asScala.map(visitComplexColType).toSeq
   }
 
   /**
