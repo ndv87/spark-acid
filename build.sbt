@@ -155,6 +155,7 @@ libraryDependencies ++= Seq(
 import sbt.Keys.libraryDependencies
 import sbt.Resolver
 
+import java.util.Properties
 import scala.xml.{Node => XmlNode, NodeSeq => XmlNodeSeq, _}
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
@@ -197,14 +198,35 @@ spShade := true
 
 spAppendScalaVersion := true
 
-publishTo := {
-  val githubOwner = "ndv87" // Имя вашего GitHub-пользователя или организации
-  val repoName = "spark-acid"       // Название вашего репозитория
-  val endpoint = s"https://maven.pkg.github.com/$githubOwner/$repoName"
-  Some("GitHub Package Registry" at endpoint)
+publishMavenStyle := true
+
+val isNexus = sys.props.get("isNexus").getOrElse("false").toBoolean
+
+import scala.io.Source
+
+def loadNexusUrl(): String = {
+  val props = new Properties()
+  val source = Source.fromFile(Path.userHome / ".ivy2" / "nexus-url.conf")
+  try {
+    props.load(source.bufferedReader())
+    props.getProperty("nexus.url", "")
+  } finally {
+    source.close()
+  }
 }
 
+publishTo := {
+  if (isNexus) {
+    val nexusUrl = loadNexusUrl()
+    Some("Nexus" at nexusUrl)
+  } else {
+    val githubUrl = "https://maven.pkg.github.com/ndv87/spark-acid"
+    Some("GitHub" at githubUrl)
+  }
+ }
+
 credentials += Credentials(Path.userHome / ".ivy2" / ".sbtcredentials")
+credentials += Credentials(Path.userHome / ".ivy2" / ".sbtcredentialsnexus")
 
 licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0")
 
@@ -243,7 +265,6 @@ pomExtra :=
     </developers>
 
 
-publishMavenStyle := true
 
 
 import ReleaseTransformations._
