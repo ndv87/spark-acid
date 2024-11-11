@@ -17,7 +17,7 @@
  * limitations under the License.
  */
 
-name := "spark-acid"
+name := s"spark-acid-${sparkVersion.value}"
 
 organization := "com.qubole"
 
@@ -197,6 +197,13 @@ spShade := true
 
 spAppendScalaVersion := true
 
+publishTo := {
+  val githubOwner = "ndv87" // Имя вашего GitHub-пользователя или организации
+  val repoName = "spark-acid"       // Название вашего репозитория
+  val endpoint = s"https://maven.pkg.github.com/$githubOwner/$repoName"
+  Some("GitHub Package Registry" at endpoint)
+}
+
 credentials += Credentials(Path.userHome / ".ivy2" / ".sbtcredentials")
 
 licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0")
@@ -238,7 +245,6 @@ pomExtra :=
 
 publishMavenStyle := true
 
-bintrayReleaseOnPublish := false
 
 import ReleaseTransformations._
 
@@ -301,7 +307,6 @@ assemblyExcludedJars in assembly := {
 
 publishMavenStyle := true
 
-bintrayReleaseOnPublish := false
 
 import ReleaseTransformations._
 //
