@@ -95,7 +95,7 @@ class HiveAcidDataSource
   private def getFullyQualifiedTableName(parameters: Map[String, String]): String = {
     parameters.getOrElse("table", {
       throw HiveAcidErrors.tableNotSpecifiedException()
-    })
+    })//.replaceAll("spark_catalog\\.", "")
   }
 }
 
