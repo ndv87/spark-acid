@@ -37,7 +37,7 @@ resolvers += "Maven Central Server" at "https://repo1.maven.org/maven2/"
 /** ************************
  * Spark package settings
  */
-sparkVersion := sys.props.getOrElse("spark.version", "3.3.2")
+sparkVersion := sys.props.getOrElse("spark.version", "3.4.3")
 
 spIncludeMaven := true
 
@@ -45,7 +45,7 @@ spIgnoreProvided := true
 
 
 dependencyOverrides ++= Seq(
-  "com.fasterxml.jackson.core" % "jackson-databind" % "2.13.0",
+  "com.fasterxml.jackson.core" % "jackson-databind" % "2.14.0",
 
 
   "org.apache.hive" % "hive-shims" % "3.1.0" % "test",
@@ -59,9 +59,9 @@ dependencyOverrides ++= Seq(
 
   "org.apache.hive" % "hive-llap-client" % "3.1.0" % "test",
   "org.apache.hive" % "hive-llap-common" % "3.1.0" % "test",
-  "org.apache.calcite" % "calcite-core" % "1.37.0" % "test",
-  "org.codehaus.janino" % "janino" % "3.0.16" % "test",
-  "org.codehaus.janino" % "commons-compiler" % "3.0.16" % "test"
+  "org.apache.calcite" % "calcite-core" % "1.37.0",
+  "org.codehaus.janino" % "janino" % "3.1.6" % "test",
+  "org.codehaus.janino" % "commons-compiler" % "3.1.6" % "test"
 
 ).toSet
 
@@ -107,7 +107,7 @@ lazy val scalatest = "org.scalatest" %% "scalatest" % "3.2.17"
 // Dependencies for Test
 libraryDependencies ++= Seq(
   "org.apache.iceberg" % "iceberg-hive-runtime" % "1.5.0"% "test",
-  "org.apache.iceberg" % "iceberg-spark-runtime-3.3_2.13" % "1.5.0"% "test",
+  "org.apache.iceberg" % "iceberg-spark-runtime-3.4_2.13" % "1.5.0"% "test",
   "org.apache.iceberg" % "iceberg-core" % "1.5.0"% "test",
   "org.apache.iceberg" % "iceberg-hive-metastore" % "1.5.0"% "test",
   "org.apache.iceberg" % "iceberg-spark" % "1.5.0"% "test",
@@ -124,9 +124,9 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % sparkVersion.value % "test",
   "org.apache.spark" %% "spark-sql" % sparkVersion.value % "test",
   "org.apache.spark" %% "spark-hive" % sparkVersion.value % "test",
-  "org.apache.calcite" % "calcite-core" % "1.37.0" % "test",
-  "org.codehaus.janino" % "janino" % "3.0.16" % "test",
-  "org.codehaus.janino" % "commons-compiler" % "3.0.16" % "test",
+  "org.apache.calcite" % "calcite-core" % "1.37.0",
+  "org.codehaus.janino" % "janino" % "3.1.6" % "test",
+  "org.codehaus.janino" % "commons-compiler" % "3.1.6" % "test",
 
   "org.apache.hive" % "hive-shims" % "3.1.0" % "test",
   "org.apache.hive" % "hive-storage-api" % "2.8.1" % "test",
@@ -199,6 +199,11 @@ spShade := true
 spAppendScalaVersion := true
 
 publishMavenStyle := true
+
+assemblyMergeStrategy in assembly := {
+  case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+  case _ => MergeStrategy.first
+}
 
 artifact in (Compile, assembly) := {
   val art = (artifact in (Compile, assembly)).value

@@ -79,7 +79,7 @@ case class HiveAcidAutoConvert(spark: SparkSession) extends Rule[LogicalPlan] {
         UpdateCommand(aliasedTable, setExpressions, condition)
       case u @ DeleteFromTable (EliminatedSubQuery(aliasedTable), condition) =>
         DeleteCommand(aliasedTable, condition)
-      case u @ MergeIntoTable (target, source, cond, matchedActions, notMatchedActions) =>
+      case u @ MergeIntoTable (target, source, cond, matchedActions, notMatchedActions, _) =>
 
       if (EliminatedSubQuery.unapply(target).isEmpty) {
         u
