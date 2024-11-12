@@ -200,6 +200,13 @@ spAppendScalaVersion := true
 
 publishMavenStyle := true
 
+artifact in (Compile, assembly) := {
+  val art = (artifact in (Compile, assembly)).value
+  art.withClassifier(Some("assembly"))
+}
+
+addArtifact(artifact in (Compile, assembly), assembly)
+
 val isNexus = sys.props.get("isNexus").getOrElse("false").toBoolean
 
 import scala.io.Source

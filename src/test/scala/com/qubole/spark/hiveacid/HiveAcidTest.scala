@@ -9,7 +9,7 @@ class HiveAcidTest extends Environment {
   import spkImpl._
 
   test("read acid table") {
-
+com.qubole.shaded.hadoop.hive.ql.io.RecordIdentifier
     spark.conf.set("acid_max_num_buckets", 1)
 
     spark.sql("create table ice_db.trans (id int) stored as orc tblproperties('transactional'='true')")
