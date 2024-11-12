@@ -62,6 +62,8 @@ import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.hive.{Hive3Inspectors, HiveAcidUtils}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.SerializableConfiguration
+
 import scala.jdk.CollectionConverters._
 
 /**
@@ -102,7 +104,7 @@ extends CastSupport with SQLConfHelper with Reader with Logging {
 
   // NOTE: All hadoop/hive configs should be set before broadcasting hadoopConf
   private val _broadcastedHadoopConf =
-    sparkSession.sparkContext.broadcast(new SerializableConfiguration(readerOptions.hadoopConf))
+    sparkSession.sparkContext.broadcast(new org.apache.spark.util.SerializableConfiguration(readerOptions.hadoopConf))
 
   override def conf: SQLConf = sparkSession.sessionState.conf
 

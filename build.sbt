@@ -56,10 +56,11 @@ dependencyOverrides ++= Seq(
   "org.apache.hive" % "hive-metastore" % "3.1.0" % "test",
   //  "org.apache.hive" % "hive-metastore" % "2.3.9" % "test",
   //  "org.apache.hive" % "hive-exec" % "2.3.9" % "test",
+  "org.apache.hadoop" % "hadoop-client-api" % "3.2.4" % "provided",
 
   "org.apache.hive" % "hive-llap-client" % "3.1.0" % "test",
   "org.apache.hive" % "hive-llap-common" % "3.1.0" % "test",
-  "org.apache.calcite" % "calcite-core" % "1.37.0" % "test",
+  "org.apache.calcite" % "calcite-core" % "1.37.0",
   "org.codehaus.janino" % "janino" % "3.0.16" % "test",
   "org.codehaus.janino" % "commons-compiler" % "3.0.16" % "test"
 
@@ -90,8 +91,10 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-catalyst" % sparkVersion.value % "provided" excludeAll(
     ExclusionRule("org.apache", "hadoop-common"),
     ExclusionRule("org.apache", "hadoop-hdfs")),
-  "org.apache.hadoop" % "hadoop-common" % "3.1.3" % "provided",
-  "org.apache.hadoop" % "hadoop-hdfs" % "3.1.3" % "provided",
+  "org.apache.hadoop" % "hadoop-common" % "3.2.4" % "provided",
+  "org.apache.hadoop" % "hadoop-client-api" % "3.2.4" % "provided",
+
+  "org.apache.hadoop" % "hadoop-hdfs" % "3.2.4" % "provided",
   "org.apache.commons" % "commons-lang3" % "3.3.5" % "provided",
   // antlr-runtime
   "org.antlr" % "antlr4-runtime" % "4.7.2" % "provided",
@@ -112,8 +115,8 @@ libraryDependencies ++= Seq(
   "org.apache.iceberg" % "iceberg-hive-metastore" % "1.5.0"% "test",
   "org.apache.iceberg" % "iceberg-spark" % "1.5.0"% "test",
   "org.apache.iceberg" % "iceberg-common" % "1.5.0",
-  "org.apache.hadoop" % "hadoop-common" % "3.1.3" % "provided",
-  "org.apache.hadoop" % "hadoop-hdfs" % "3.1.3" % "provided",
+  "org.apache.hadoop" % "hadoop-common" % "3.2.4" % "provided",
+  "org.apache.hadoop" % "hadoop-hdfs" % "3.2.4" % "provided",
   "org.apache.commons" % "commons-lang3" % "3.3.5" % "provided",
   // Dependencies for tests
   //
@@ -124,7 +127,7 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % sparkVersion.value % "test",
   "org.apache.spark" %% "spark-sql" % sparkVersion.value % "test",
   "org.apache.spark" %% "spark-hive" % sparkVersion.value % "test",
-  "org.apache.calcite" % "calcite-core" % "1.37.0" % "test",
+  "org.apache.calcite" % "calcite-core" % "1.37.0",
   "org.codehaus.janino" % "janino" % "3.0.16" % "test",
   "org.codehaus.janino" % "commons-compiler" % "3.0.16" % "test",
 
@@ -200,12 +203,17 @@ spAppendScalaVersion := true
 
 publishMavenStyle := true
 
+assemblyMergeStrategy in assembly := {
+  case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+  case _ => MergeStrategy.first
+}
+
 artifact in (Compile, assembly) := {
   val art = (artifact in (Compile, assembly)).value
   art.withClassifier(Some("assembly"))
 }
 
-addArtifact(artifact in (Compile, assembly), assembly)
+//addArtifact(artifact in (Compile, assembly), assembly)
 
 val isNexus = sys.props.get("isNexus").getOrElse("false").toBoolean
 

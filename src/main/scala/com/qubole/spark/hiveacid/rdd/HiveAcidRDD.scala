@@ -23,18 +23,17 @@ import java.io.{FileNotFoundException, IOException}
 import java.text.SimpleDateFormat
 import java.util.concurrent.ConcurrentHashMap
 import java.util.{Date, Locale}
-
 import scala.collection.mutable.ListBuffer
 import scala.reflect.ClassTag
 import com.qubole.shaded.hadoop.hive.common.ValidWriteIdList
 import com.qubole.shaded.hadoop.hive.ql.io.{AcidInputFormat, AcidUtils, HiveInputFormat, RecordIdentifier}
 import com.qubole.spark.hiveacid.rdd.HiveAcidRDD.HiveAcidPartitionsWithSplitRDD
 import com.qubole.spark.hiveacid.reader.hive.HiveAcidPartitionComputer
-import com.qubole.spark.hiveacid.util.{SerializableConfiguration, Util}
+import com.qubole.spark.hiveacid.util.Util
 import com.qubole.spark.hiveacid.util.{SerializableWritable => _}
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapred.{FileInputFormat, _}
+import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
 import org.apache.hadoop.util.ReflectionUtils
 import org.apache.spark.{Partitioner, _}
@@ -44,6 +43,8 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.SerializableConfiguration
+
 import scala.jdk.CollectionConverters._
 
 // This file has lot of borrowed code from org.apache.spark.rdd.HadoopRdd
@@ -111,7 +112,7 @@ private[hiveacid] class HiveAcidRDD[K, V](sc: SparkContext,
       sc,
       validWriteIds,
       isFullAcidTable,
-      sc.broadcast(new SerializableConfiguration(conf))
+      sc.broadcast(new util.SerializableConfiguration(conf))
         .asInstanceOf[Broadcast[SerializableConfiguration]],
       initLocalJobConfFuncOpt = None,
       inputFormatClass,
@@ -142,6 +143,7 @@ private[hiveacid] class HiveAcidRDD[K, V](sc: SparkContext,
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf: JobConf = {
     val conf: Configuration = broadcastedConf.value.value
+
     if (shouldCloneJobConf) {
       // Hadoop Configuration objects are not thread-safe, which may lead to various problems if
       // one job modifies a configuration while another reads it (SPARK-2546).  This problem occurs

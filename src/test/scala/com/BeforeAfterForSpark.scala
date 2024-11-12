@@ -114,6 +114,9 @@ trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with
         .set("spark.sql.hive.metastore.version", "3.1.3")
         .set("spark.sql.hive.metastore.jars", "maven")
 
+    .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+//    .set("spark.kryo.registrationRequired", "true")
+
     .set("spark.sql.parquet.writeLegacyFormat", "true")
     .set("spark.driver.host", "127.0.0.1")
     .set("spark.sql.caseSensitive", "false")
@@ -121,7 +124,7 @@ trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with
     .set("spark.driver.allowMultipleContexts", "true")
     .set("spark.sql.autoBroadcastJoinThreshold", "-1")
 //
-.set("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,com.qubole.spark.hiveacid.HiveAcidAutoConvertExtension")
+    .set("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,com.qubole.spark.hiveacid.HiveAcidAutoConvertExtension")
     .set("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog")
     .set("spark.sql.catalog.spark_catalog.type", "hive")
     .set("spark.sql.defaultCatalog", "spark_catalog")
