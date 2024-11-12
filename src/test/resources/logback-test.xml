@@ -33,7 +33,7 @@
 <!--  <logger name="org.apache.spark.sql.hive" level="DEBUG" />-->
 
 
-  <root level="WARN">
+  <root level="INFO">
     <appender-ref ref="ASYNCFILE" />
     <appender-ref ref="ASYNCSTDOUT" />
   </root>

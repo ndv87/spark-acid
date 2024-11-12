@@ -40,4 +40,23 @@
     <name>yarn.nodemanager.aux-services.mapreduce_shuffle.class</name>
     <value>org.apache.hadoop.mapred.ShuffleHandler</value>
   </property>
+
+  <property>
+    <name>yarn.nodemanager.resource.memory-mb</name>
+    <value>4096</value> <!-- or more depending on your system's memory -->
+  </property>
+  <property>
+    <name>yarn.app.mapreduce.am.resource.memory-mb</name>
+    <value>1028</value> <!-- or more depending on your system's memory -->
+  </property>
+  <property>
+    <name>yarn.scheduler.minimum-allocation-mb</name>
+    <value>1028</value> <!-- or more depending on your system's memory -->
+  </property>
+
+  <property>
+    <name>yarn.nodemanager.resource.cpu-vcores</name>
+    <value>4</value> <!-- or more depending on your system's CPUs -->
+  </property>
+
 </configuration>

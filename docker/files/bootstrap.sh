@@ -44,12 +44,12 @@ cp /conf/yarn-site.xml /hadoop/etc/hadoop
 cp /conf/hive-site.xml /hive/conf/
 
 
-gprn "set up mysql"
-service mysqld start
+#gprn "set up mysql"
+#service mysqld start
 
 # Set root password 
-mysql -uroot -e "set password = PASSWORD('root');"
-mysql -uroot -e "grant all privileges on *.* to 'root'@'%' identified by 'root';"
+#mysql -uroot -e "set password = PASSWORD('root');"
+#mysql -uroot -e "grant all privileges on *.* to 'root'@'%' identified by 'root';"
 service sshd start
 
 gprn "start yarn"
@@ -60,15 +60,20 @@ gprn "Formatting name node"
 hadoop/bin/hdfs namenode -format
 
 gprn "Start hdfs"
+hadoop/sbin/hadoop-daemon.sh start namenode
 hadoop/sbin/start-dfs.sh
+hadoop/sbin/hadoop-daemon.sh start datanode
+
+export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.312.b07-2.el8_5.x86_64/jre
+/hadoop/sbin/yarn-daemon.sh start nodemanager
 
 jps
 
-mkdir -p /hive/warehouse -dbType mysql  -initSchemaTo 3.1.0
+mkdir -p /hive/warehouse
 
 
 gprn "Set up metastore DB"
-hive/bin/schematool -dbType mysql  -initSchemaTo 3.1.0
+hive/bin/schematool -dbType derby -initSchema
 
 gprn "Start HMS server"
 hive/bin/hive --service metastore -p  10000 &

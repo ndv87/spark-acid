@@ -21,27 +21,27 @@
 
 <!-- This is SparkSQL's hive configuration. -->
 <configuration>
-    <property>
-        <name>javax.jdo.option.ConnectionURL</name>
-        <value>jdbc:mysql://localhost/metastore?createDatabaseIfNotExist=true</value>
-    </property>
-    <property>
-        <name>javax.jdo.option.ConnectionDriverName</name>
-        <value>com.mysql.jdbc.Driver</value>
-    </property>
-    <property>
-        <name>javax.jdo.option.ConnectionUserName</name>
-        <value>root</value>
-    </property>
-    <property>
-        <name>javax.jdo.option.ConnectionPassword</name>
-        <value>root</value>
-    </property>
+<!--    <property>-->
+<!--        <name>javax.jdo.option.ConnectionURL</name>-->
+<!--        <value>jdbc:mysql://localhost/metastore?createDatabaseIfNotExist=true</value>-->
+<!--    </property>-->
+<!--    <property>-->
+<!--        <name>javax.jdo.option.ConnectionDriverName</name>-->
+<!--        <value>com.mysql.jdbc.Driver</value>-->
+<!--    </property>-->
+<!--    <property>-->
+<!--        <name>javax.jdo.option.ConnectionUserName</name>-->
+<!--        <value>root</value>-->
+<!--    </property>-->
+<!--    <property>-->
+<!--        <name>javax.jdo.option.ConnectionPassword</name>-->
+<!--        <value>root</value>-->
+<!--    </property>-->
 
     <!-- for server side -->
     <property>
         <name>hive.metastore.uris</name>
-        <value>thrift://0.0.0.0:10000</value>
+        <value>thrift://127.0.0.1:10000</value>
     </property>
 
     <property>
@@ -64,12 +64,43 @@
         <name>hive.compactor.initiator.on</name>
         <value>true</value>
     </property>
+    <property>
+        <name>hive.compactor.worker.threads</name>
+        <value>1</value>
+    </property>
 
     <property>
         <name>hive.txn.manager</name>
         <value>org.apache.hadoop.hive.ql.lockmgr.DbTxnManager</value>>
     </property>
-
+    <property>
+        <name>hive.server2.enable.doAs</name>
+        <value>false</value>
+    </property>
+    <property>
+        <name>hive.tez.exec.inplace.progress</name>
+        <value>false</value>
+    </property>
+    <property>
+        <name>hive.exec.scratchdir</name>
+        <value>/opt/hive/scratch_dir</value>
+    </property>
+    <property>
+        <name>hive.user.install.directory</name>
+        <value>/opt/hive/install_dir</value>
+    </property>
+    <property>
+        <name>tez.runtime.optimize.local.fetch</name>
+        <value>true</value>
+    </property>
+<!--    <property>-->
+<!--        <name>mapreduce.framework.name</name>-->
+<!--        <value>local</value>-->
+<!--    </property>-->
+<!--    <property>-->
+<!--        <name>tez.local.mode</name>-->
+<!--        <value>true</value>-->
+<!--    </property>-->
     <!-- Hive server 2 -->
     <property>
         <name>hive.server2.thrift.http.port</name>
@@ -78,9 +109,16 @@
 
 	<property>
         <name>hive.execution.engine</name>
-        <value>mr</value>
+        <value>tez</value>
     </property>
-
+    <property>
+        <name>metastore.warehouse.dir</name>
+        <value>/tmp</value>
+    </property>
+    <property>
+        <name>hive.metastore.warehouse.dir</name>
+        <value>/tmp</value>
+    </property>
     <property>
         <name>hive.input.format</name>
         <value>org.apache.hadoop.hive.ql.io.HiveInputFormat</value>

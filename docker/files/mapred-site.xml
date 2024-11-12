@@ -52,11 +52,15 @@
     </property>
     <property>
         <name>mapreduce.map.memory.mb</name>
-        <value>2048</value>
+        <value>512</value>
     </property>
     <property>
         <name>mapreduce.reduce.memory.mb</name>
-        <value>2048</value>
+        <value>512</value>
+    </property>
+    <property>
+        <name>yarn.scheduler.minimum-allocation-mb</name>
+        <value>512</value>
     </property>
 </configuration>
  

@@ -33,17 +33,17 @@ RUN wget https://archive.apache.org/dist/hadoop/common/hadoop-3.1.1/hadoop-3.1.1
 RUN tar -xvzf hadoop-3.1.1.tar.gz
 RUN ln -sf /hadoop-3.1.1 /hadoop
 
-RUN wget https://archive.apache.org/dist/hive/hive-3.1.2/apache-hive-3.1.2-bin.tar.gz
-RUN tar -xvzf apache-hive-3.1.2-bin.tar.gz
-RUN ln -sf /apache-hive-3.1.2-bin /hive
+RUN wget https://archive.apache.org/dist/hive/hive-3.1.3/apache-hive-3.1.3-bin.tar.gz
+RUN tar -xvzf apache-hive-3.1.3-bin.tar.gz
+RUN ln -sf /apache-hive-3.1.3-bin /hive
 
-RUN yum -y install \
-    mysql-server \
-     && yum -y clean all && rm -rf /tmp/* /var/tmp/*
+#RUN yum -y install \
+#    mysql-server \
+#     && yum -y clean all && rm -rf /tmp/* /var/tmp/*
 
-RUN wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-j-9.1.0.tar.gz
-RUN tar -xvzf mysql-connector-j-9.1.0.tar.gz
-RUN ln -sf /mysql-connector-j-9.1.0/mysql-connector-j-9.1.0.jar apache-hive-3.1.2-bin/lib/mysql-connector-java.jar
+#RUN wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-j-9.1.0.tar.gz
+#RUN tar -xvzf mysql-connector-j-9.1.0.tar.gz
+#RUN ln -sf /mysql-connector-j-9.1.0/mysql-connector-j-9.1.0.jar apache-hive-3.1.2-bin/lib/mysql-connector-java.jar
 
 # Setup sock proxy
 RUN yum install -y openssh openssh-clients openssh-server
@@ -71,6 +71,7 @@ COPY yarn-site.xml /conf/yarn-site.xml
 COPY mapred-site.xml /conf/mapred-site.xml
 COPY hive-site.xml /conf/hive-site.xml
 COPY bootstrap.sh /bootstrap.sh
+RUN
 
 # HDFS ports
 EXPOSE 1004 1006 8020 9866 9867 9870 9864 50470 9000
