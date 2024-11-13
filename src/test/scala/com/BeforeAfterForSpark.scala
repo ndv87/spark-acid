@@ -120,12 +120,13 @@ trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with
     .set("spark.sql.hive.convertMetastoreParquet", "false")
     .set("spark.driver.allowMultipleContexts", "true")
     .set("spark.sql.autoBroadcastJoinThreshold", "-1")
-//
+
+//    .set("spark.sql.extensions", "com.qubole.spark.hiveacid.HiveAcidAutoConvertExtension")
 .set("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,com.qubole.spark.hiveacid.HiveAcidAutoConvertExtension")
     .set("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog")
     .set("spark.sql.catalog.spark_catalog.type", "hive")
     .set("spark.sql.defaultCatalog", "spark_catalog")
-
+//
     .set("spark.sql.catalog.spark_catalog.warehouse", s"$absolutePathSparkWarehouseDirNoDisk")
 
     .set("spark.sql.adaptive.enabled", "false")

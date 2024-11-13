@@ -19,9 +19,9 @@
 
 package com.qubole.spark.hiveacid.datasource
 
+import com.qubole.spark.hiveacid.datasource.HiveAcidDataSource.getFullyQualifiedTableName
 import com.qubole.spark.hiveacid.{HiveAcidErrors, HiveAcidTable}
 import com.qubole.spark.hiveacid.streaming.HiveAcidSink
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.Sink
@@ -92,14 +92,16 @@ class HiveAcidDataSource
 
   }
 
-  private def getFullyQualifiedTableName(parameters: Map[String, String]): String = {
-    parameters.getOrElse("table", {
-      throw HiveAcidErrors.tableNotSpecifiedException()
-    })//.replaceAll("spark_catalog\\.", "")
-  }
+
 }
 
 object HiveAcidDataSource {
   val NAME = "HiveAcid"
+
+  def getFullyQualifiedTableName(parameters: Map[String, String]): String = {
+    parameters.getOrElse("table", {
+      throw HiveAcidErrors.tableNotSpecifiedException()
+    })
+  }
 }
 
