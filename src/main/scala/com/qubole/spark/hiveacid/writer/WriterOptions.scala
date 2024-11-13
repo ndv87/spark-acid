@@ -20,9 +20,9 @@
 package com.qubole.spark.hiveacid.writer
 
 import com.qubole.spark.hiveacid.HiveAcidOperation
-import com.qubole.spark.hiveacid.util.SerializableConfiguration
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * Writer options which will be serialized and sent to each executor

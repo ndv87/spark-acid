@@ -62,6 +62,8 @@ import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.hive.{Hive3Inspectors, HiveAcidUtils}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.SerializableConfiguration
+
 import scala.jdk.CollectionConverters._
 
 /**

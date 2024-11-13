@@ -25,7 +25,6 @@ import com.qubole.spark.hiveacid._
 import com.qubole.spark.hiveacid.hive.HiveAcidMetadata
 import com.qubole.spark.hiveacid.writer.hive.{HiveAcidFullAcidWriter, HiveAcidInsertOnlyWriter, HiveAcidWriterOptions}
 import com.qubole.spark.hiveacid.transaction._
-import com.qubole.spark.hiveacid.util.SerializableConfiguration
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession, functions}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
@@ -34,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.command.AlterTableAddPartitionCommand
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * Performs eager write of a dataframe df to a hive acid table based on operationType

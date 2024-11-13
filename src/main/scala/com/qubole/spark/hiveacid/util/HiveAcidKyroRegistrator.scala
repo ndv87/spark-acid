@@ -25,6 +25,6 @@ import com.esotericsoftware.kryo.serializers.JavaSerializer
 
 class HiveAcidKyroRegistrator extends KryoRegistrator {
   override def registerClasses(kryo: Kryo): Unit = {
-    kryo.register(classOf[com.qubole.spark.hiveacid.util.SerializableConfiguration], new JavaSerializer)
+//    kryo.register(classOf[com.qubole.spark.hiveacid.util.SerializableConfiguration], new JavaSerializer)
   }
 }
