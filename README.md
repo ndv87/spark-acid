@@ -2,8 +2,11 @@
 
 Spark version: 3.3.2
 Scala version: 2.13
+Hive metastore 3.1.2
 
 If works with iceberg SparkSessionCatalog then pass to spark-submit --conf spark.driver.extraClassPath=hive-exec-3.1.3.jar,...
+
+
 
 A Datasource on top of Spark Datasource V1 APIs, that provides Spark support for [Hive ACID transactions](https://cwiki.apache.org/confluence/display/Hive/Hive+Transactions).
 
@@ -20,8 +23,6 @@ UPDATE | ``>= v0.5.0`` |  Not Supported |
 DELETE | ``>= v0.5.0`` |  Not Supported |
 MERGE | ``> v0.5.0`` | Not Supported |
 STREAMING INSERT | ``>= v0.5.0`` | ``>= v0.5.0`` |
-
-*Note: In case of insert only table for support of write operation compatibility check needs to be disabled*
 
 ## Quick Start
 
@@ -71,9 +72,9 @@ Change configuration in `$SPARK_HOME/conf/hive-site.xml` to point to already con
 
 There are a few ways to use the library while running spark-shell
 
-       `spark-shell --packages qubole:spark-acid:0.6.0-s_2.11
+       `spark-shell --jars spark-acid-3.4.3-assembly-0.6.0.jar
 
-2. If you built the jar yourself, copy the `spark-acid-assembly-0.6.0.jar` jar into `$SPARK_HOME/assembly/target/scala.2_11/jars` and run
+2. If you built the jar yourself, copy the `spark-acid-3.4.3-assembly-0.6.0.jar` jar into `$SPARK_HOME/assembly/target/scala.2_13/jars` and run
 
        spark-shell
 
@@ -337,7 +338,7 @@ _NB: Hive ACID V2 is supported in Hive 3.0.0 onwards and for that hive Metastore
 
 	sbt assembly
 
-This will create the `spark-acid-assembly-0.6.0.jar` which can be now used in your application.
+This will create the `spark-acid-3.4.3-assembly-0.6.0.jar` which can be now used in your application.
 
 ### Test
 Tests are run against a standalone docker setup. Please refer to [Docker setup] (docker/README.md) to build and start a container.
