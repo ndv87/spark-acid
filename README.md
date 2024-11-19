@@ -1,6 +1,6 @@
 # Hive ACID Data Source for Apache Spark
 
-Spark version: 3.3.2
+Spark version: 3.4.2
 Scala version: 2.13
 Hive metastore 3.1.2
 
