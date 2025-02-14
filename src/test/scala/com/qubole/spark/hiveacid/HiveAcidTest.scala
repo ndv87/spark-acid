@@ -27,6 +27,8 @@ class HiveAcidTest extends Environment {
     spark.table("ice_db.trans_struct").show
     println(beeline("select * from ice_db.trans_struct"))
 
+    assert(spark.sql("select cast(strc.ts as string) from ice_db.trans_struct where strc.src='spark'").head().getString(0) == "2025-07-07 04:00:00")
+
 //    spark.conf.set("spark.sql.session.timeZone", "UTC")
     spark.sql("create table ice_db.trans_ts (ts timestamp, src string) stored as orc tblproperties('transactional'='true')")
 
