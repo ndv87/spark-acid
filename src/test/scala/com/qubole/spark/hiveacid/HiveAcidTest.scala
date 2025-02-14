@@ -10,16 +10,50 @@ class HiveAcidTest extends Environment {
 
   test("read acid table") {
 
+    //при чтении не прибавлять TZ, а при записи не нормировать по UTC, т.е. не вычитать 3.ч.
+    //проверить ситуацию при работе с обычной таблицей
     spark.conf.set("acid_max_num_buckets", 1)
 
-    spark.sql("create table ice_db.trans (id int) stored as orc tblproperties('transactional'='true')")
+    beeline(s"create table ice_db.no_trans_ts (ts timestamp, src string) stored as orc")
 
-    spark.sql("show create table ice_db.trans").show
+    beeline("insert into ice_db.no_trans_ts values (cast('2025-01-01 10:00:00' as timestamp), 'beeline')")
+    spark.sql("insert into ice_db.no_trans_ts values (cast('2025-07-07 04:00:00' as timestamp), 'spark')")
+
+    spark.table("ice_db.no_trans_ts").show
+    println(beeline("select * from ice_db.no_trans_ts"))
+
+    spark.sql("create table ice_db.trans_struct (strc struct<ts:timestamp, src:string>) stored as orc tblproperties('transactional'='true')")
+    spark.sql("insert into ice_db.trans_struct SELECT struct(cast('2025-07-07 04:00:00' as timestamp), 'spark') ")
+    spark.table("ice_db.trans_struct").show
+    println(beeline("select * from ice_db.trans_struct"))
+
+    assert(spark.sql("select cast(strc.ts as string) from ice_db.trans_struct where strc.src='spark'").head().getString(0) == "2025-07-07 04:00:00")
+
+    //    spark.conf.set("spark.sql.session.timeZone", "UTC")
+    spark.sql("create table ice_db.trans_ts (ts timestamp, src string) stored as orc tblproperties('transactional'='true')")
+
+    spark.sql("insert into ice_db.trans_ts values (cast('2025-07-07 04:00:00' as timestamp), 'spark')")
+    beeline("insert into ice_db.trans_ts values (cast('2025-01-01 10:00:00' as timestamp), 'beeline')")
+
+    spark.table("ice_db.trans_ts").show
+    println(beeline("select * from ice_db.trans_ts"))
+
+    val joinRes = spark.sql(
+      """
+        |select * from
+        |ice_db.no_trans_ts nt join
+        |ice_db.trans_ts tt on
+        |nt.ts=tt.ts
+        |""".stripMargin).collect()
+
+    assert(joinRes.length == 2)
+
+    spark.sql("create table ice_db.trans (id int) stored as orc tblproperties('transactional'='true')")
 
     spark.sql("insert into ice_db.trans values (0),(1),(2),(3),(4)")
     spark.sql("update ice_db.trans set id = 2 where id = 1 or id = 0")
 
-    spark.sql("select * from ice_db.trans").show
+    spark.table("ice_db.trans").show
 
     spark.sql("create table ice_db.trans_part (id int) partitioned by (part string) stored as orc tblproperties('transactional'='true')")
 

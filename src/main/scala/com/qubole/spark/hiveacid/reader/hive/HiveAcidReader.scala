@@ -64,6 +64,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
 
+import java.sql.Timestamp
+import java.time.ZoneId
 import scala.jdk.CollectionConverters._
 
 /**
@@ -79,7 +81,7 @@ private[reader] class HiveAcidReader(sparkSession: SparkSession,
                                      hiveAcidOptions: HiveAcidReaderOptions,
                                      validWriteIds: ValidWriteIdList)
 
-extends CastSupport with SQLConfHelper with Reader with Logging {
+  extends CastSupport with SQLConfHelper with Reader with Logging {
 
   private val _minSplitsPerRDD = if (sparkSession.sparkContext.isLocal) {
     0 // will be split based on block by default.
@@ -88,8 +90,8 @@ extends CastSupport with SQLConfHelper with Reader with Logging {
       sparkSession.sparkContext.defaultMinPartitions)
   }
 
-//  SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(
-//    sparkSession.sparkContext.getConf, readerOptions.hadoopConf)
+  //  SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(
+  //    sparkSession.sparkContext.getConf, readerOptions.hadoopConf)
 
   if (readerOptions.readConf.predicatePushdownEnabled) {
     setPushDownFiltersInHadoopConf(readerOptions.hadoopConf, hiveAcidOptions.dataSchema,
@@ -104,14 +106,14 @@ extends CastSupport with SQLConfHelper with Reader with Logging {
 
   // NOTE: All hadoop/hive configs should be set before broadcasting hadoopConf
   private val _broadcastedHadoopConf =
-    sparkSession.sparkContext.broadcast(new SerializableConfiguration(readerOptions.hadoopConf))
+    sparkSession.sparkContext.broadcast(new org.apache.spark.util.SerializableConfiguration(readerOptions.hadoopConf))
 
   override def conf: SQLConf = sparkSession.sessionState.conf
 
   /**
    * @param hiveAcidMetadata - hive acid metadata for underlying table
    * @return - Returns RDD on top of non partitioned hive acid table and list of partitionNames empty list
-    *         for entire table
+   *         for entire table
    */
   def makeRDDForTable(hiveAcidMetadata: HiveAcidMetadata): RDD[InternalRow] = {
     val hiveTable = hiveAcidMetadata.hTable
@@ -181,12 +183,12 @@ extends CastSupport with SQLConfHelper with Reader with Logging {
   }
 
   /**
-    * Utility to convert hiveRDD on non-partitioned table to Deserialized RDD which transforms
-    * raw Records from hiveRDD to InternalRow
-    * @param hiveRDD
-    * @param deserializerClass
-    * @return Deserialized RDD
-    */
+   * Utility to convert hiveRDD on non-partitioned table to Deserialized RDD which transforms
+   * raw Records from hiveRDD to InternalRow
+   * @param hiveRDD
+   * @param deserializerClass
+   * @return Deserialized RDD
+   */
   private def deserializeTableRdd(hiveRDD: RDD[(RecordIdentifier, Writable)],
                                   deserializerClass: Class[_ <: Deserializer]) = {
     val localTableDesc = hiveAcidOptions.tableDesc
@@ -224,9 +226,9 @@ extends CastSupport with SQLConfHelper with Reader with Logging {
    *     subdirectory of each partition being read. If None, then all files are accepted.
    */
   private def makeRDDForPartitionedTable(
-      partitionToDeserializer: Map[HiveJarPartition, Class[_ <: Deserializer]],
-      filterOpt: Option[PathFilter],
-      readerOptions: ReaderOptions): RDD[InternalRow] = {
+                                          partitionToDeserializer: Map[HiveJarPartition, Class[_ <: Deserializer]],
+                                          filterOpt: Option[PathFilter],
+                                          readerOptions: ReaderOptions): RDD[InternalRow] = {
 
     val hivePartitionRDDSeq = partitionToDeserializer.map { case (partition, partDeserializer) =>
       val partPath = partition.getDataLocation
@@ -266,14 +268,14 @@ extends CastSupport with SQLConfHelper with Reader with Logging {
   }
 
   /**
-    * Convert Hive RDD for a particular partition into Deserialized RDD which transforms every Raw row
-    * into InternalRow.
-    *
-    * @param partitionRDD
-    * @param partition
-    * @param partDeserializer
-    * @return
-    */
+   * Convert Hive RDD for a particular partition into Deserialized RDD which transforms every Raw row
+   * into InternalRow.
+   *
+   * @param partitionRDD
+   * @param partition
+   * @param partDeserializer
+   * @return
+   */
   private def deserializePartitionRdd(partitionRDD: RDD[(RecordIdentifier, Writable)], partition: HiveJarPartition, partDeserializer: Class[_ <: Deserializer]) = {
     // member variable cannot be used directly inside mapPartition as HiveAcidReader is not serializable.
     val broadcastedHadoopConf = _broadcastedHadoopConf
@@ -303,9 +305,9 @@ extends CastSupport with SQLConfHelper with Reader with Logging {
     // that are not. Attached indices indicate the position of each attribute in
     // the output schema.
     val (partitionKeyAttrs, nonPartitionKeyAttrs) =
-    readerOptions.requiredAttributes.zipWithIndex.partition { case (attr, _) =>
-      readerOptions.partitionAttributes.contains(attr)
-    }
+      readerOptions.requiredAttributes.zipWithIndex.partition { case (attr, _) =>
+        readerOptions.partitionAttributes.contains(attr)
+      }
 
     def fillPartitionKeys(rawPartValues: Array[String], row: InternalRow, includeRowIds: Boolean): Unit = {
       partitionKeyAttrs.foreach { case (attr, ordinal) =>
@@ -348,9 +350,9 @@ extends CastSupport with SQLConfHelper with Reader with Logging {
   }
 
   /**
-    * If `filterOpt` is defined, then it will be used to filter files from `path`. These files are
-    * returned in a single, comma-separated string.
-    */
+   * If `filterOpt` is defined, then it will be used to filter files from `path`. These files are
+   * returned in a single, comma-separated string.
+   */
   private def applyFilterIfNeeded(path: Path, filterOpt: Option[PathFilter]): String = {
     filterOpt match {
       case Some(filter) =>
@@ -362,9 +364,9 @@ extends CastSupport with SQLConfHelper with Reader with Logging {
   }
 
   /**
-    * Creates a HiveAcidRDD based on the broadcasted HiveConf and other job properties that will be
-    * applied locally on each slave.
-    */
+   * Creates a HiveAcidRDD based on the broadcasted HiveConf and other job properties that will be
+   * applied locally on each slave.
+   */
   private def createRddForTable(tableDesc: TableDesc,
                                 cols: util.List[FieldSchema],
                                 tableParameters: util.Map[String, String],
@@ -393,13 +395,13 @@ extends CastSupport with SQLConfHelper with Reader with Logging {
 
   private def setRequiredColumnsInHadoopConf(conf: Configuration,
                                              dataSchema: StructType,
-                                     requiredColumns: Seq[String]): Unit = {
+                                             requiredColumns: Seq[String]): Unit = {
     val dataCols: Seq[String] = dataSchema.fields.map(_.name)
     val requiredColumnIndexes = requiredColumns.map(a => dataCols.indexOf(a): Integer)
     val (sortedIDs, sortedNames) = requiredColumnIndexes.zip(requiredColumns).sorted.unzip
-//    conf.set(ColumnProjectionUtils.READ_ALL_COLUMNS, "false")
-//    conf.set(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, sortedNames.mkString(","))
-//    conf.set(ColumnProjectionUtils.READ_COLUMN_IDS_CONF_STR, sortedIDs.mkString(","))
+    //    conf.set(ColumnProjectionUtils.READ_ALL_COLUMNS, "false")
+    //    conf.set(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, sortedNames.mkString(","))
+    //    conf.set(ColumnProjectionUtils.READ_COLUMN_IDS_CONF_STR, sortedIDs.mkString(","))
   }
 
   private def setPushDownFiltersInHadoopConf(conf: Configuration,
@@ -462,9 +464,9 @@ private[reader] object HiveAcidReader extends Hive3Inspectors with Logging {
   }
 
   /**
-    * This will try to fetch all Partitions and prune them according to filter specified
-    * @return prunedPartitions
-    */
+   * This will try to fetch all Partitions and prune them according to filter specified
+   * @return prunedPartitions
+   */
   private def prunePartitions(partitions: Seq[HiveJarPartition],
                               hiveAcidMetadata: HiveAcidMetadata,
                               readerOptions: ReaderOptions,
@@ -520,9 +522,9 @@ private[reader] object HiveAcidReader extends Hive3Inspectors with Logging {
   }
 
   /**
-    * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
-    * instantiate a HiveAcidRDD.
-    */
+   * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
+   * instantiate a HiveAcidRDD.
+   */
   def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc,
                                  tableParameters: util.Map[String, String],
                                  schemaColNames: String,
@@ -548,16 +550,16 @@ private[reader] object HiveAcidReader extends Hive3Inspectors with Logging {
   }
 
   /**
-    * Transform all given raw `(RowIdentifier, Writable)`s into `InternalRow`s.
-    *
-    * @param iterator Iterator of all `Writable`s to be transformed
-    * @param rawDeser The `Deserializer` associated with the input `Writable`
-    * @param nonPartitionKeyAttrs Attributes that should be filled together with their corresponding
-    *                             positions in the output schema
-    * @param mutableRow A reusable `MutableRow` that should be filled
-    * @param tableDeser Table Deserializer
-    * @return An `Iterator[Row]` transformed from `iterator`
-    */
+   * Transform all given raw `(RowIdentifier, Writable)`s into `InternalRow`s.
+   *
+   * @param iterator Iterator of all `Writable`s to be transformed
+   * @param rawDeser The `Deserializer` associated with the input `Writable`
+   * @param nonPartitionKeyAttrs Attributes that should be filled together with their corresponding
+   *                             positions in the output schema
+   * @param mutableRow A reusable `MutableRow` that should be filled
+   * @param tableDeser Table Deserializer
+   * @return An `Iterator[Row]` transformed from `iterator`
+   */
   def fillObject(
                   iterator: Iterator[(RecordIdentifier, Writable)],
                   rawDeser: Deserializer,
@@ -619,8 +621,14 @@ private[reader] object HiveAcidReader extends Hive3Inspectors with Logging {
               row.update(ordinal, toCatalystDecimal(oi, value))
           case oi: TimestampObjectInspector =>
             (value: Any, row: InternalRow, ordinal: Int) =>
-              row.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(
-                oi.getPrimitiveJavaObject(value).toSqlTimestamp))
+              val x = oi.getPrimitiveJavaObject(value)
+              val localDateTime = x.toSqlTimestamp.toLocalDateTime
+              val zoneId = ZoneId.systemDefault()
+              val zonedDateTime = localDateTime.atZone(zoneId)
+              val offsetSeconds = zonedDateTime.getOffset.getTotalSeconds
+              val utcDateTime = zonedDateTime.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime
+              val utcTs = Timestamp.valueOf(utcDateTime)
+              row.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(utcTs))
           case oi: DateObjectInspector =>
             (value: Any, row: InternalRow, ordinal: Int) =>
               val y = oi.getPrimitiveWritableObject(value).get().toEpochMilli

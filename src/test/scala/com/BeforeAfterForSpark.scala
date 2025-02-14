@@ -12,6 +12,7 @@ import org.testcontainers.containers.wait.strategy.Wait
 
 import java.io.{File, FileDescriptor, FileOutputStream, PrintStream}
 import java.nio.file.{Files, Paths}
+import java.time.Duration
 import scala.io.Source
 
 object Utils {
@@ -50,7 +51,44 @@ trait HMSContainer extends BeforeAndAfterAll {
 }
 
 
-trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with HMSContainer {
+trait HS2Container extends HMSContainer with BeforeAndAfterAll {
+  self: Suite with BeforeAfterForSpark with Environment =>
+
+  lazy val HS2Container = {
+    HMSContainer.start()
+    val container = GenericContainer(dockerImage = "apache/hive:3.1.3",
+      exposedPorts = List(10000, 10002),
+      env = Map[String, String](
+        "HIVE_CUSTOM_CONF_DIR" -> "/hive_custom_conf",
+        "SERVICE_OPTS" -> s"-Dhive.metastore.uris=thrift://${HMSContainer.container.getContainerInfo.getNetworkSettings.getIpAddress}:9083",
+        "SERVICE_NAME" -> "hiveserver2",
+        "IS_RESUME" -> "true"
+      ),
+      fileSystemBind = List(
+        FileSystemBind(s"${(absolutePathSparkWarehouseDir)}", absolutePathSparkWarehouseDirNoDisk, BindMode.READ_WRITE),
+        FileSystemBind(s"${(absolutePathSparkWarehouseDir)}/docker_conf", "/hive_custom_conf", BindMode.READ_WRITE)),
+      //      waitStrategy = Wait.forLogMessage(".*Hive Session ID.*", 1)
+      waitStrategy = Wait.forListeningPorts(10002).withStartupTimeout(Duration.ofMinutes(5))
+
+    )
+
+    container.underlyingUnsafeContainer.withCreateContainerCmdModifier(cmd => cmd.withUser("root"))
+    container
+  }
+
+
+  def beeline(sql: String) = {
+    val res = HS2Container.execInContainer("beeline", "-u", s"jdbc:hive2://localhost:10000", "--silent=true", "-e", s"$sql")
+    if (res.getStderr.contains("Error")) throw new IllegalStateException(res.getStderr) else res.getStdout
+  }
+
+  override def afterAll(): Unit = {
+    HS2Container.stop()
+    super.afterAll()
+  }
+}
+
+trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with HS2Container {
   self: Suite with Environment =>
 
   lazy val absolutePathSparkWarehouseDir: String =
@@ -59,12 +97,12 @@ trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with
       .replaceAll("\\.", "-")
       .toLowerCase
 
-   lazy val absolutePathSparkWarehouseDirNoDisk = absolutePathSparkWarehouseDir
+  lazy val absolutePathSparkWarehouseDirNoDisk = absolutePathSparkWarehouseDir
     .replaceAll("^\\w:", "")
     .replaceAll(raw"\\", raw"/")
 
 
-   lazy val absoluteHadoopHomeDir: String =
+  lazy val absoluteHadoopHomeDir: String =
     new File(".").getCanonicalPath +
       Seq("src", "test", "resources", "hadoop").mkString(sep, sep, "")
 
@@ -99,7 +137,7 @@ trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with
   writeFile(hiveConfNewPath, hiveConfNew)
 
 
-  HMSContainer.start()
+  HS2Container.start()
 
 
   val conf = new SparkConf().setMaster(s"local[$numCores]")
@@ -109,10 +147,13 @@ trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with
     .set("hive.exec.dynamic.partition.mode", "nonstrict")
     .set("spark.sql.warehouse.dir", s"$absolutePathSparkWarehouseDirNoDisk")
     .set("spark.hadoop.hive.metastore.uris", s"thrift://${HMSContainer.host}:${HMSContainer.mappedPort(9083)}")
-//    .set("spark.sql.hive.metastore.version", "2.3.9")
-//    .set("spark.sql.hive.metastore.jars", "maven")
-        .set("spark.sql.hive.metastore.version", "3.1.3")
-        .set("spark.sql.hive.metastore.jars", "maven")
+    //    .set("spark.sql.hive.metastore.version", "2.3.9")
+    //    .set("spark.sql.hive.metastore.jars", "maven")
+    .set("spark.sql.hive.metastore.version", "3.1.3")
+    .set("spark.sql.hive.metastore.jars", "maven")
+
+    .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    //    .set("spark.kryo.registrationRequired", "true")
 
     .set("spark.sql.parquet.writeLegacyFormat", "true")
     .set("spark.driver.host", "127.0.0.1")
@@ -120,20 +161,19 @@ trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with
     .set("spark.sql.hive.convertMetastoreParquet", "false")
     .set("spark.driver.allowMultipleContexts", "true")
     .set("spark.sql.autoBroadcastJoinThreshold", "-1")
-
-//    .set("spark.sql.extensions", "com.qubole.spark.hiveacid.HiveAcidAutoConvertExtension")
-.set("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,com.qubole.spark.hiveacid.HiveAcidAutoConvertExtension")
+    //
+    .set("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,com.qubole.spark.hiveacid.HiveAcidAutoConvertExtension")
     .set("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog")
     .set("spark.sql.catalog.spark_catalog.type", "hive")
     .set("spark.sql.defaultCatalog", "spark_catalog")
-//
+
     .set("spark.sql.catalog.spark_catalog.warehouse", s"$absolutePathSparkWarehouseDirNoDisk")
 
     .set("spark.sql.adaptive.enabled", "false")
     .set("spark.sql.storeAssignmentPolicy", "ANSI")
 
     .set("spark.io.compression.codec", "zstd")
-
+  //    .set("spark.sql.session.timeZone", "UTC")
 
   override def beforeAll(): Unit = {
     super.beforeAll()
