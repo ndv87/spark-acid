@@ -64,6 +64,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
 
+import java.sql.Timestamp
+import java.time.ZoneId
 import scala.jdk.CollectionConverters._
 
 /**
@@ -619,8 +621,14 @@ private[reader] object HiveAcidReader extends Hive3Inspectors with Logging {
               row.update(ordinal, toCatalystDecimal(oi, value))
           case oi: TimestampObjectInspector =>
             (value: Any, row: InternalRow, ordinal: Int) =>
-              row.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(
-                oi.getPrimitiveJavaObject(value).toSqlTimestamp))
+              val x = oi.getPrimitiveJavaObject(value)
+              val localDateTime = x.toSqlTimestamp.toLocalDateTime
+              val zoneId = ZoneId.systemDefault()
+              val zonedDateTime = localDateTime.atZone(zoneId)
+              val offsetSeconds = zonedDateTime.getOffset.getTotalSeconds
+              val utcDateTime = zonedDateTime.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime
+              val utcTs = Timestamp.valueOf(utcDateTime)
+              row.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(utcTs))
           case oi: DateObjectInspector =>
             (value: Any, row: InternalRow, ordinal: Int) =>
               val y = oi.getPrimitiveWritableObject(value).get().toEpochMilli

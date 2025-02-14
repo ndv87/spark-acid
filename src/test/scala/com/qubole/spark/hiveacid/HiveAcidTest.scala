@@ -10,7 +10,41 @@ class HiveAcidTest extends Environment {
 
   test("read acid table") {
 
+    //при чтении не прибавлять TZ, а при записи не нормировать по UTC, т.е. не вычитать 3.ч.
+    //проверить ситуацию при работе с обычной таблицей
     spark.conf.set("acid_max_num_buckets", 1)
+
+    beeline(s"create table ice_db.no_trans_ts (ts timestamp, src string) stored as orc")
+
+    beeline("insert into ice_db.no_trans_ts values (cast('2025-01-01 10:00:00' as timestamp), 'beeline')")
+    spark.sql("insert into ice_db.no_trans_ts values (cast('2025-07-07 04:00:00' as timestamp), 'spark')")
+
+    spark.table("ice_db.no_trans_ts").show
+    println(beeline("select * from ice_db.no_trans_ts"))
+
+    spark.sql("create table ice_db.trans_struct (strc struct<ts:timestamp, src:string>) stored as orc tblproperties('transactional'='true')")
+    spark.sql("insert into ice_db.trans_struct SELECT struct(cast('2025-07-07 04:00:00' as timestamp), 'spark') ")
+    spark.table("ice_db.trans_struct").show
+    println(beeline("select * from ice_db.trans_struct"))
+
+//    spark.conf.set("spark.sql.session.timeZone", "UTC")
+    spark.sql("create table ice_db.trans_ts (ts timestamp, src string) stored as orc tblproperties('transactional'='true')")
+
+    spark.sql("insert into ice_db.trans_ts values (cast('2025-07-07 04:00:00' as timestamp), 'spark')")
+    beeline("insert into ice_db.trans_ts values (cast('2025-01-01 10:00:00' as timestamp), 'beeline')")
+
+    spark.table("ice_db.trans_ts").show
+    println(beeline("select * from ice_db.trans_ts"))
+
+    val joinRes = spark.sql(
+      """
+        |select * from
+        |ice_db.no_trans_ts nt join
+        |ice_db.trans_ts tt on
+        |nt.ts=tt.ts
+        |""".stripMargin).collect()
+
+    assert(joinRes.length == 2)
 
     spark.sql("create table ice_db.trans (id int) stored as orc tblproperties('transactional'='true')")
 

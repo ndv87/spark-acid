@@ -21,7 +21,7 @@ package com.qubole.spark.hiveacid.writer.hive
 
 import java.util.Properties
 import scala.collection.JavaConverters._
-import scala.collection.{mutable}
+import scala.collection.mutable
 import scala.collection.immutable.Seq
 import com.qubole.shaded.hadoop.hive.ql.exec.FileSinkOperator.RecordWriter
 import com.qubole.shaded.hadoop.hive.ql.exec.Utilities
@@ -56,15 +56,15 @@ abstract private[writer] class HiveAcidWriter(val options: WriterOptions,
   // create partition path. See udf `getPartitionPathString`
   // input = p1, p2, p3
   // output = Seq(Expr(p1=*), Literal(/), Expr(p2=?), Literal('/'), Expr(p3=?))
-//  private val partitionPathExpression: Expression = Concat(
-//    options.partitionColumns.zipWithIndex.flatMap { case (c, i) =>
-//      val partitionName = ScalaUDF(
-//        ExternalCatalogUtils.getPartitionPathString _,
-//        StringType,
-//        Seq(Literal(c.name), Cast(c, StringType, Option(options.timeZoneId))),
-//        Seq(true))
-//      if (i == 0) Seq(partitionName) else Seq(Literal(Path.SEPARATOR), partitionName)
-//    })
+  //  private val partitionPathExpression: Expression = Concat(
+  //    options.partitionColumns.zipWithIndex.flatMap { case (c, i) =>
+  //      val partitionName = ScalaUDF(
+  //        ExternalCatalogUtils.getPartitionPathString _,
+  //        StringType,
+  //        Seq(Literal(c.name), Cast(c, StringType, Option(options.timeZoneId))),
+  //        Seq(true))
+  //      if (i == 0) Seq(partitionName) else Seq(Literal(Path.SEPARATOR), partitionName)
+  //    })
 
   private val partitionPathExpression: Expression = Concat(
     options.partitionColumns.zipWithIndex.flatMap { case (c, i) =>
@@ -185,7 +185,7 @@ abstract private[writer] class HiveAcidWriter(val options: WriterOptions,
  * data into single bucket needs to be written by single task. Hence before writing
  * the data is Same bucket cannot have multiple files
  *
- * @param options - writer options to use
+ * @param options         - writer options to use
  * @param HiveAcidOptions - Hive3 related writer options.
  */
 private[writer] class HiveAcidFullAcidWriter(options: WriterOptions,
@@ -325,7 +325,7 @@ private[writer] class HiveAcidFullAcidWriter(options: WriterOptions,
   }
 
   def close(): Unit = {
-    writers.foreach( x => try {
+    writers.foreach(x => try {
       // TODO: Seems the boolean value passed into close does not matter.
       x._2.asInstanceOf[RecordUpdater].close(false)
     }
@@ -337,16 +337,16 @@ private[writer] class HiveAcidFullAcidWriter(options: WriterOptions,
 }
 
 /**
-  * This class is responsible for writing a InternalRow into a insert-only table
-  * This can handle InsertInto/InsertOverwrite. This does not support Update/Delete operations
-  * It has method `process` which takes 1 InternalRow and processes it based on
-  * OperationType. row is expected to contain data and no row ids
-  *
-  * @param options writer options to use
-  * @param HiveAcidOptions hive3 specific options, which is passed into underlying hive3 API
-  */
+ * This class is responsible for writing a InternalRow into a insert-only table
+ * This can handle InsertInto/InsertOverwrite. This does not support Update/Delete operations
+ * It has method `process` which takes 1 InternalRow and processes it based on
+ * OperationType. row is expected to contain data and no row ids
+ *
+ * @param options         writer options to use
+ * @param HiveAcidOptions hive3 specific options, which is passed into underlying hive3 API
+ */
 private[writer] class HiveAcidInsertOnlyWriter(options: WriterOptions,
-                                       HiveAcidOptions: HiveAcidWriterOptions)
+                                               HiveAcidOptions: HiveAcidWriterOptions)
   extends HiveAcidWriter(options, HiveAcidOptions) {
 
   override protected def createWriter(path: Path, acidBucketId: Int): Any = {
@@ -376,9 +376,9 @@ private[writer] class HiveAcidInsertOnlyWriter(options: WriterOptions,
       Reporter.NULL)
   }
   /**
-    * Process an Spark InternalRow
-    * @param row row to be processed
-    */
+   * Process an Spark InternalRow
+   * @param row row to be processed
+   */
   override def process(row: InternalRow): Unit = {
     //  Identify the partitionColumns and nonPartitionColumns in row
     val partitionColRow = getPartitionValues(row)
@@ -402,7 +402,7 @@ private[writer] class HiveAcidInsertOnlyWriter(options: WriterOptions,
   }
 
   def close(): Unit = {
-    writers.foreach( x => try {
+    writers.foreach(x => try {
       // TODO: Seems the boolean value passed into close does not matter.
       x._2.asInstanceOf[RecordWriter].close(false)
     }
@@ -446,11 +446,27 @@ private[hive] class SparkHiveRowConverter(options: WriterOptions,
   //
   private val recIdInspector = RecordIdentifier.StructInfo.oi
 
-  private val oIWithoutRowId = ObjectInspectorUtils
+  private val oIWithoutRowId ={
+    val oi = ObjectInspectorUtils
       .getStandardObjectInspector(
         deserializer.getObjectInspector,
         ObjectInspectorCopyOption.JAVA)
       .asInstanceOf[StructObjectInspector]
+    oi
+    val dataStructFields = asScalaIteratorConverter(
+      oi.getAllStructFieldRefs.iterator).asScala.toSeq
+
+    val newFieldNameSeq = dataStructFields.map(_.getFieldName)
+    val newOISeq = dataStructFields.map{f=>
+      if (f.getFieldObjectInspector.getTypeName == "timestamp") {
+        new com.qubole.spark.hiveacid.oi.JavaTimestampObjectInspector().asInstanceOf[com.qubole.shaded.hadoop.hive.serde2.objectinspector.ObjectInspector]
+      } else f.getFieldObjectInspector
+    }
+    val res = ObjectInspectorFactory.getStandardStructObjectInspector(
+      newFieldNameSeq.asJava, newOISeq.asJava
+    )
+    res
+  }
 
 
   private val oIWithRowId = {

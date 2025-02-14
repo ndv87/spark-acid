@@ -12,6 +12,7 @@ import org.testcontainers.containers.wait.strategy.Wait
 
 import java.io.{File, FileDescriptor, FileOutputStream, PrintStream}
 import java.nio.file.{Files, Paths}
+import java.time.Duration
 import scala.io.Source
 
 object Utils {
@@ -50,7 +51,44 @@ trait HMSContainer extends BeforeAndAfterAll {
 }
 
 
-trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with HMSContainer {
+trait HS2Container extends HMSContainer with BeforeAndAfterAll {
+  self: Suite with BeforeAfterForSpark with Environment =>
+
+  lazy val HS2Container = {
+    HMSContainer.start()
+    val container = GenericContainer(dockerImage = "apache/hive:3.1.3",
+      exposedPorts = List(10000, 10002),
+      env = Map[String, String](
+        "HIVE_CUSTOM_CONF_DIR" -> "/hive_custom_conf",
+        "SERVICE_OPTS" -> s"-Dhive.metastore.uris=thrift://${HMSContainer.container.getContainerInfo.getNetworkSettings.getIpAddress}:9083",
+        "SERVICE_NAME" -> "hiveserver2",
+        "IS_RESUME" -> "true"
+      ),
+      fileSystemBind = List(
+        FileSystemBind(s"${(absolutePathSparkWarehouseDir)}", absolutePathSparkWarehouseDirNoDisk, BindMode.READ_WRITE),
+        FileSystemBind(s"${(absolutePathSparkWarehouseDir)}/docker_conf", "/hive_custom_conf", BindMode.READ_WRITE)),
+      //      waitStrategy = Wait.forLogMessage(".*Hive Session ID.*", 1)
+      waitStrategy = Wait.forListeningPorts(10002).withStartupTimeout(Duration.ofMinutes(5))
+
+    )
+
+    container.underlyingUnsafeContainer.withCreateContainerCmdModifier(cmd => cmd.withUser("root"))
+    container
+  }
+
+
+  def beeline(sql: String) = {
+    val res = HS2Container.execInContainer("beeline", "-u", s"jdbc:hive2://localhost:10000", "--silent=true", "-e", s"$sql")
+    if (res.getStderr.contains("Error")) throw new IllegalStateException(res.getStderr) else res.getStdout
+  }
+
+  override def afterAll(): Unit = {
+    HS2Container.stop()
+    super.afterAll()
+  }
+}
+
+trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with HS2Container {
   self: Suite with Environment =>
 
   lazy val absolutePathSparkWarehouseDir: String =
@@ -99,7 +137,7 @@ trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with
   writeFile(hiveConfNewPath, hiveConfNew)
 
 
-  HMSContainer.start()
+  HS2Container.start()
 
 
   val conf = new SparkConf().setMaster(s"local[$numCores]")
@@ -135,7 +173,7 @@ trait BeforeAfterForSpark extends BeforeAndAfterAll with BeforeAndAfterEach with
     .set("spark.sql.storeAssignmentPolicy", "ANSI")
 
     .set("spark.io.compression.codec", "zstd")
-
+//    .set("spark.sql.session.timeZone", "UTC")
 
   override def beforeAll(): Unit = {
     super.beforeAll()

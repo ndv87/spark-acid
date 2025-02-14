@@ -213,7 +213,7 @@ artifact in (Compile, assembly) := {
   art.withClassifier(Some("assembly"))
 }
 
-//addArtifact(artifact in (Compile, assembly), assembly)
+addArtifact(artifact in (Compile, assembly), assembly)
 
 val isNexus = sys.props.get("isNexus").getOrElse("false").toBoolean
 

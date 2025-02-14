@@ -22,7 +22,6 @@ package org.apache.spark.sql.hive
 import java.lang.reflect.{ParameterizedType, Type, WildcardType}
 import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle, SignStyle}
 import java.time.temporal.ChronoField
-
 import scala.collection.JavaConverters._
 import com.qubole.shaded.hadoop.hive.common.`type`.{Date, HiveChar, HiveDecimal, HiveVarchar, Timestamp, TimestampUtils}
 import com.qubole.shaded.hadoop.hive.serde2.{io => hiveIo}
@@ -37,6 +36,8 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+
+import java.time.{Instant, ZoneId}
 
 /**
  * This class is similar to org.apache.spark.sql.hive.HiveInspectors.
@@ -231,7 +232,9 @@ trait Hive3Inspectors {
           val micros = o.asInstanceOf[Long]
           val millis: Long = micros / 1000
           val nanos: Long = (micros % 1000) * 1000
-          Timestamp.ofEpochMilli(millis, nanos.toInt)
+          val ts=Timestamp.ofEpochMilli(millis, nanos.toInt)
+          val localDateTime = ts.toSqlTimestamp.toLocalDateTime
+          Timestamp.valueOf(localDateTime.toString)
         })
       case _: VoidObjectInspector =>
         (_: Any) => null // always be null for void object inspector
@@ -240,7 +243,12 @@ trait Hive3Inspectors {
     case soi: StandardStructObjectInspector =>
       val schema = dataType.asInstanceOf[StructType]
       val wrappers = soi.getAllStructFieldRefs.asScala.zip(schema.fields).map {
-        case (ref, field) => wrapperFor(ref.getFieldObjectInspector, field.dataType)
+        case (ref, field) =>
+                    if (field.dataType.isInstanceOf[TimestampType]) {
+                      val tsOi = new com.qubole.spark.hiveacid.oi.JavaTimestampObjectInspector().asInstanceOf[com.qubole.shaded.hadoop.hive.serde2.objectinspector.ObjectInspector]
+                      wrapperFor(tsOi, field.dataType)
+                    } else
+          wrapperFor(ref.getFieldObjectInspector, field.dataType)
       }
       withNullSafe { o =>
         val struct = soi.create()
@@ -521,7 +529,14 @@ trait Hive3Inspectors {
           data: Any => {
             if (data != null) {
               val t = x.getPrimitiveWritableObject(data)
-              t.getSeconds * 1000000L + t.getNanos / 1000L
+              val s=t.getSeconds * 1000000L + t.getNanos / 1000L
+
+              val instant = Instant.ofEpochSecond(s)
+              val zoneId = ZoneId.systemDefault()
+              val localZonedTime = instant.atZone(zoneId)
+              val offsetSeconds = localZonedTime.getOffset.getTotalSeconds * 1000000L
+              val r = s - offsetSeconds
+              r
             } else {
               null
             }
