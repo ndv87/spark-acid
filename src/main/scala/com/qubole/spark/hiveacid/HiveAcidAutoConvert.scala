@@ -20,6 +20,7 @@
 package com.qubole.spark.hiveacid
 
 import com.qubole.spark.datasources.hiveacid.sql.catalyst.plans.command.{DeleteCommand, MergeCommand, UpdateCommand}
+import com.qubole.spark.hiveacid.datasource.HiveAcidDataSource.getFullyQualifiedTableName
 
 import java.util.Locale
 import org.apache.spark.sql.{SparkSession, SparkSessionExtensions}
@@ -57,8 +58,14 @@ case class HiveAcidAutoConvert(spark: SparkSession) extends Rule[LogicalPlan] {
     val options = relation.tableMeta.properties ++
       relation.tableMeta.storage.properties ++ Map("table" -> relation.tableMeta.qualifiedName)
 
+    val currentCatalog = spark.sessionState.catalogManager.currentCatalog.name()
+    val table = spark.sessionState.sqlParser
+      .parseTableIdentifier(getFullyQualifiedTableName(options).replaceAll(s"$currentCatalog\\.", ""))
+
+    val tb = spark.sessionState.catalog.getTableMetadata(table)
     val newRelation = new HiveAcidDataSource().createRelation(spark.sqlContext, options)
-    LogicalRelation(newRelation, isStreaming = false)
+    val lr = LogicalRelation(newRelation, tb)
+    lr
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {

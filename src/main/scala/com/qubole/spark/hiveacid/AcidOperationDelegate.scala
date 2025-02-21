@@ -245,9 +245,11 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
         new Column(Alias(newExpr, origAttr.name)())
     }
 
+    val currentCatalog = sparkSession.sessionState.catalogManager.currentCatalog.name()
+
     condition match {
       case Some(cond) =>
-        val condNoCatalog = expr(cond.expr.sql.replaceAll(s"spark_catalog\\.${hiveAcidMetadata.fullyQualifiedName}\\.", "")).expr
+        val condNoCatalog = expr(cond.expr.sql.replaceAll(s"$currentCatalog\\.${hiveAcidMetadata.fullyQualifiedName}\\.", "")).expr
         val resolvedExpr = SqlUtils.resolveReferences(sparkSession,
           condNoCatalog,
           qualifiedPlan, failIfUnresolved = false)
@@ -327,7 +329,9 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
     val (qualifiedPlan: LogicalPlan, resolvedDf: DataFrame) =
       SqlUtils.getDFQualified(sparkSession, readDF(true), hiveAcidMetadata.fullyQualifiedName)
 
-    val condNoCatalog = expr(condition.expr.sql.replaceAll(s"spark_catalog\\.${hiveAcidMetadata.fullyQualifiedName}\\.", "")).expr
+    val currentCatalog = sparkSession.sessionState.catalogManager.currentCatalog.name()
+
+    val condNoCatalog = expr(condition.expr.sql.replaceAll(s"$currentCatalog\\.${hiveAcidMetadata.fullyQualifiedName}\\.", "")).expr
 
     val resolvedExpr = SqlUtils.resolveReferences(sparkSession,
       condNoCatalog,

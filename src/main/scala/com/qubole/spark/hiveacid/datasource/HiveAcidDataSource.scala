@@ -101,5 +101,11 @@ class HiveAcidDataSource
 
 object HiveAcidDataSource {
   val NAME = "HiveAcid"
+
+  def getFullyQualifiedTableName(parameters: Map[String, String]): String = {
+    parameters.getOrElse("table", {
+      throw HiveAcidErrors.tableNotSpecifiedException()
+    })
+  }
 }
 
