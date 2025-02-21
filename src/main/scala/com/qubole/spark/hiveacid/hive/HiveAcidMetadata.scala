@@ -50,7 +50,7 @@ class HiveAcidMetadata(sparkSession: SparkSession,
   // a hive representation of the table
   val hTable: metadata.Table = {
     val hive: Hive = Hive.get(hiveConf)
-    val table = sparkSession.sessionState.sqlParser.parseTableIdentifier(fullyQualifiedTableName)
+    val table = sparkSession.sessionState.sqlParser.parseTableIdentifier(fullyQualifiedTableName.replaceAll("^spark_catalog\\.", ""))
     val hTable = hive.getTable(
       table.database match {
         case Some(database) => database
