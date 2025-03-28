@@ -183,7 +183,8 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
       .load()
 
     Try(df.head()) match {
-      case Failure(exception) if exception.getMessage.contains("does not exist") =>
+      case Failure(exception) if exception.getMessage.contains("does not exist") |
+        exception.getMessage.contains("head of empty") =>
         sparkSession.createDataFrame(sparkSession.sparkContext.emptyRDD[Row], df.schema)
       case Success(_) => df
     }
