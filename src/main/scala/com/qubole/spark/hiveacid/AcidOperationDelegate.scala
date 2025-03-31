@@ -183,7 +183,8 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
       .load()
 
     Try(df.head()) match {
-      case Failure(exception) if exception.getMessage.contains("does not exist") =>
+      case Failure(exception) if exception.getMessage.contains("does not exist") |
+        exception.getMessage.contains("head of empty") =>
         sparkSession.createDataFrame(sparkSession.sparkContext.emptyRDD[Row], df.schema)
       case Success(_) => df
     }
@@ -355,8 +356,8 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
     if (curTxn == null) {
       throw new IllegalStateException("Transaction not set before invoking update on dataframe")
     }
-    if (deleteDf.schema != hiveAcidMetadata.tableSchemaWithRowId) {
-      throw new UnsupportedOperationException("Delete Dataframe doesn't have expected schema. " +
+    if (deleteDf.schema.fields.map(f => f.withComment("").toDDL).toSet != hiveAcidMetadata.tableSchemaWithRowId.fields.map(f => f.withComment("").toDDL).toSet) {
+     throw new UnsupportedOperationException("Delete Dataframe doesn't have expected schema. " +
         "Provided: " + deleteDf.schema.mkString(",") +
         "  Expected: " + hiveAcidMetadata.tableSchemaWithRowId.mkString(","))
     }
@@ -417,8 +418,8 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
     if (curTxn == null) {
       throw new IllegalStateException("Transaction not set before invoking update on dataframe")
     }
-    if (updateDf.schema != hiveAcidMetadata.tableSchemaWithRowId) {
-      throw new UnsupportedOperationException("Update Dataframe doesn't have expected schema. " +
+    if (updateDf.schema.fields.map(f => f.withComment("").toDDL).toSet != hiveAcidMetadata.tableSchemaWithRowId.fields.map(f => f.withComment("").toDDL).toSet) {
+     throw new UnsupportedOperationException("Update Dataframe doesn't have expected schema. " +
         "Provided: " + updateDf.schema.mkString(",") +
         "  Expected: " + hiveAcidMetadata.tableSchemaWithRowId.mkString(","))
     }

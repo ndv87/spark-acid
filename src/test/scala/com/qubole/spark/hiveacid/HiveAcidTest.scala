@@ -14,6 +14,24 @@ class HiveAcidTest extends Environment {
     //проверить ситуацию при работе с обычной таблицей
     spark.conf.set("acid_max_num_buckets", 1)
 
+    spark.sql("create table ice_db.trans_src (id int comment 'id', src string comment 'src') stored as orc tblproperties('transactional'='true')")
+    spark.sql("create table ice_db.trans_tgt (id int comment 'ID', src string comment 'SRC') stored as orc tblproperties('transactional'='true')")
+
+    spark.sql("insert into ice_db.trans_src values (1, 'spark')")
+    spark.sql("insert into ice_db.trans_src values (2, 'spark')")
+    spark.sql("insert into ice_db.trans_tgt values (1, 'spark')")
+
+    spark.sql("select * from ice_db.trans_src where id=1").createOrReplaceTempView("trans")
+
+    spark.sql(
+      """
+        |merge into ice_db.trans_tgt tgt using trans src on tgt.id=src.id
+        |when matched then update set tgt.src=src.src
+        |when not matched then insert *
+        |""".stripMargin)
+
+    assert(spark.sql("select * from ice_db.trans_tgt").count == 1)
+
     beeline(s"create table ice_db.no_trans_ts (ts timestamp, src string) stored as orc")
 
     beeline("insert into ice_db.no_trans_ts values (cast('2025-01-01 10:00:00' as timestamp), 'beeline')")

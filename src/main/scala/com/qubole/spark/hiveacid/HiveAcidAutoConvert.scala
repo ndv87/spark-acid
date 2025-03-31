@@ -133,6 +133,8 @@ object EliminatedSubQuery {
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
     val r = EliminateSubqueryAliases(plan)
     r match {
+      case View(_, _, plan) =>
+        Some(plan)
       case LogicalRelation(r: HiveAcidRelation, _, _, _) =>
         Some(plan)
       case _ =>
