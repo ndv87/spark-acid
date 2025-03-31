@@ -39,81 +39,85 @@ import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
 
-
 /**
-  * Delegate to perform ACID operations: UPDATE/DELETE/INSERT/READ
-  * These APIs are not protected under Transactions, however most of them may need
-  * transactions to be already open.
-  */
+ * Delegate to perform ACID operations: UPDATE/DELETE/INSERT/READ
+ * These APIs are not protected under Transactions, however most of them may need
+ * transactions to be already open.
+ */
 trait AcidOperationDelegate {
   /**
-    * Return an RDD on top of Hive ACID table
-    *
-    * @param requiredColumns - columns needed
-    * @param filters - filters that can be pushed down to file format
-    * @param readConf - read conf
-    * @param curTxn - current Transaction under which ead will be done
-    * @return
-    */
+   * Return an RDD on top of Hive ACID table
+   *
+   * @param requiredColumns - columns needed
+   * @param filters         - filters that can be pushed down to file format
+   * @param readConf        - read conf
+   * @param curTxn          - current Transaction under which ead will be done
+   * @return
+   */
   def getRdd(requiredColumns: Array[String],
              filters: Array[Filter],
              readConf: SparkAcidConf,
              curTxn: HiveAcidTxn): RDD[Row]
 
   /**
-    * Used by streaming query to add a datframe to hive acid table.
-    * @param df - dataframe to insert
-    * @param curTxn - Transaction under which the operation is being done
-    */
+   * Used by streaming query to add a datframe to hive acid table.
+   *
+   * @param df     - dataframe to insert
+   * @param curTxn - Transaction under which the operation is being done
+   */
   def addBatch(df: DataFrame, curTxn: HiveAcidTxn): Unit
 
   /**
-    * Appends a given dataframe df into the hive acid table
-    *
-    * Note: This API is transactional in nature.
-    * @param df - dataframe to insert
-    * @param curTxn - current transaction underwhich INSERT operation needs to run.
-    * @param statementId Optional. In a same transaction, multiple statements like INSERT/UPDATE/DELETE
-    *                    (like in case of MERGE) can be issued.
-    *                    [[statementId]] has to be different for them to ensure delta collision
-    *                    is avoided for them during writes.
-    */
+   * Appends a given dataframe df into the hive acid table
+   *
+   * Note: This API is transactional in nature.
+   *
+   * @param df          - dataframe to insert
+   * @param curTxn      - current transaction underwhich INSERT operation needs to run.
+   * @param statementId Optional. In a same transaction, multiple statements like INSERT/UPDATE/DELETE
+   *                    (like in case of MERGE) can be issued.
+   *                    [[statementId]] has to be different for them to ensure delta collision
+   *                    is avoided for them during writes.
+   */
   def insertInto(df: DataFrame, curTxn: HiveAcidTxn, statementId: Option[Int] = None): Unit
 
   /**
-    * Overwrites a given dataframe df onto the hive acid table
-    *
-    * Note: This API is transactional in nature.
-    * @param df - dataframe to insert
-    * @param curTxn - current transaction under which insertOverWrite need to be run
-    * @param statementId Optional. In a same transaction, multiple statements like INSERT/UPDATE/DELETE
-    *                    (like in case of MERGE) can be issued.
-    *                    [[statementId]] has to be different for them to ensure delta collision
-    *                    is avoided for them during writes.
-    */
+   * Overwrites a given dataframe df onto the hive acid table
+   *
+   * Note: This API is transactional in nature.
+   *
+   * @param df          - dataframe to insert
+   * @param curTxn      - current transaction under which insertOverWrite need to be run
+   * @param statementId Optional. In a same transaction, multiple statements like INSERT/UPDATE/DELETE
+   *                    (like in case of MERGE) can be issued.
+   *                    [[statementId]] has to be different for them to ensure delta collision
+   *                    is avoided for them during writes.
+   */
   def insertOverwrite(df: DataFrame, curTxn: HiveAcidTxn, statementId: Option[Int] = None): Unit
 
   /**
-    * Update rows in the hive acid table based on condition and newValues
-    *
-    * Note: This API is transactional in nature.
-    * @param condition - condition string to identify rows which needs to be updated
-    * @param newValues - Map of (column, value) to set
-    */
+   * Update rows in the hive acid table based on condition and newValues
+   *
+   * Note: This API is transactional in nature.
+   *
+   * @param condition - condition string to identify rows which needs to be updated
+   * @param newValues - Map of (column, value) to set
+   */
   def update(condition: Option[String], newValues: Map[String, String], curTxn: HiveAcidTxn): Unit
+
   def update(condition: Option[Column], newValues: java.util.Map[String, Column], curTxn: HiveAcidTxn): Unit
 
   /**
-    * Merge from sourceDf to the current Table
-    *
-    * @param sourceDf
-    * @param hiveAcidMetadata
-    * @param mergeExpression
-    * @param matchedClause
-    * @param notMatched
-    * @param sourceAlias
-    * @param targetAlias
-    */
+   * Merge from sourceDf to the current Table
+   *
+   * @param sourceDf
+   * @param hiveAcidMetadata
+   * @param mergeExpression
+   * @param matchedClause
+   * @param notMatched
+   * @param sourceAlias
+   * @param targetAlias
+   */
   def merge(sourceDf: DataFrame,
             hiveAcidMetadata: HiveAcidMetadata,
             mergeExpression: Expression,
@@ -124,52 +128,55 @@ trait AcidOperationDelegate {
             txn: HiveAcidTxn): Unit
 
   /**
-    * Delete rows from the table based on `condtional` expression.
-    *
-    * Note: This API is transactional in nature.
-    * @param condition - Boolean SQL Expression filtering rows to be deleted
-    * @param curTxn - Transaction under which DELETE will be performed
-    */
+   * Delete rows from the table based on `condtional` expression.
+   *
+   * Note: This API is transactional in nature.
+   *
+   * @param condition - Boolean SQL Expression filtering rows to be deleted
+   * @param curTxn    - Transaction under which DELETE will be performed
+   */
   def delete(condition: Column, curTxn: HiveAcidTxn): Unit
 
   /**
-    * Delete dataframe of rows specified by MERGE Delete statement
-    *
-    * @param mergeDeleteDf dataframe of rows specified by MERGE Delete statement
-    * @param curTxn Transaction under which this operation will be performed
-    * @param statementId Specify Statement Id, for multi operation command like Merge statement Id
-    *                    need to be unique for every operation
-    */
+   * Delete dataframe of rows specified by MERGE Delete statement
+   *
+   * @param mergeDeleteDf dataframe of rows specified by MERGE Delete statement
+   * @param curTxn        Transaction under which this operation will be performed
+   * @param statementId   Specify Statement Id, for multi operation command like Merge statement Id
+   *                      need to be unique for every operation
+   */
   def mergeDelete(mergeDeleteDf: DataFrame, curTxn: HiveAcidTxn, statementId: Option[Int] = None): Unit
 
   /**
-    * Update dataframe with updated rows specified by MERGE update statement
-    *
-    * @param mergeUpdateDf - Dataframe with updated rows specified by MERGE update statement
-    * @param curTxn - Transaction under which this operation will be performed
-    * @param statementId - Specify Statement Id, for multi operation command like Merge statement Id
-    *                    need to be unique for every operation
-    */
-  def mergeUpdate(mergeUpdateDf : DataFrame, curTxn: HiveAcidTxn, statementId: Option[Int] = None): Unit
+   * Update dataframe with updated rows specified by MERGE update statement
+   *
+   * @param mergeUpdateDf - Dataframe with updated rows specified by MERGE update statement
+   * @param curTxn        - Transaction under which this operation will be performed
+   * @param statementId   - Specify Statement Id, for multi operation command like Merge statement Id
+   *                      need to be unique for every operation
+   */
+  def mergeUpdate(mergeUpdateDf: DataFrame, curTxn: HiveAcidTxn, statementId: Option[Int] = None): Unit
 }
 
 /**
-  * [[HiveAcidTable]] uses Delegate pattern to delegate it's API to this object
-  * @param sparkSession - spark session object
-  * @param hiveAcidMetadata - metadata object
-  * @param parameters - additional parameters
-  */
+ * [[HiveAcidTable]] uses Delegate pattern to delegate it's API to this object
+ *
+ * @param sparkSession     - spark session object
+ * @param hiveAcidMetadata - metadata object
+ * @param parameters       - additional parameters
+ */
 class HiveAcidOperationDelegate(val sparkSession: SparkSession,
                                 val hiveAcidMetadata: HiveAcidMetadata,
                                 val parameters: Map[String, String]
-                   ) extends AcidOperationDelegate with Logging {
+                               ) extends AcidOperationDelegate with Logging {
 
   private val sparkAcidConfig = SparkAcidConf(sparkSession, parameters)
 
   /**
-    * Create dataframe to read based on hiveAcidTable and passed in filter.
-    * @return Dataframe
-    */
+   * Create dataframe to read based on hiveAcidTable and passed in filter.
+   *
+   * @return Dataframe
+   */
   private def readDF(withRowId: Boolean): DataFrame = {
     val options = if (withRowId) {
       // Fetch row with rowID in it
@@ -191,11 +198,12 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
   }
 
   /**
-    * Return df after applying update clause and filter clause. This df is used to
-    * update the table.
-    * @param condition - condition string to identify rows which needs to be updated
-    * @param newValues - Map of (column, value) to set
-    */
+   * Return df after applying update clause and filter clause. This df is used to
+   * update the table.
+   *
+   * @param condition - condition string to identify rows which needs to be updated
+   * @param newValues - Map of (column, value) to set
+   */
   private def updateDF(condition: Option[String], newValues: Map[String, String]): DataFrame = {
     val conditionColumn = condition.map(functions.expr)
     val newValMap = newValues.mapValues(value => functions.expr(value)).toMap
@@ -204,11 +212,12 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
 
 
   /**
-    * Return df after after applying update clause and filter clause. This df is used to
-    * update the table.
-    * @param condition - condition string to identify rows which needs to be updated
-    * @param newValues - Map of (column, value) to set
-    */
+   * Return df after after applying update clause and filter clause. This df is used to
+   * update the table.
+   *
+   * @param condition - condition string to identify rows which needs to be updated
+   * @param newValues - Map of (column, value) to set
+   */
   private def updateDFInternal(condition: Option[Column], newValues: Map[String, Column]): DataFrame = {
 
     val df = readDF(true)
@@ -218,8 +227,10 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
     def toStrColumnMap(map: Map[String, Column]): Map[String, Column] = {
       map.toSeq.map { case (k, v) =>
         k.toLowerCase -> functions.expr(SqlUtils.resolveReferences(sparkSession, v.expr,
-          qualifiedPlan, failIfUnresolved = false).sql)}.toMap
+          qualifiedPlan, failIfUnresolved = false).sql)
+      }.toMap
     }
+
     val strColumnMap = toStrColumnMap(newValues)
     val updateColumns = strColumnMap.keys
     val resolver = sparkSession.sessionState.conf.resolver
@@ -235,9 +246,9 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
       resolvedDf.queryExecution.optimizedPlan.output.map {
         attr =>
           val updateColOpt = updateColumns.find(uc => resolver(uc, attr.name))
-           updateColOpt match {
-             case Some(updateCol) => strColumnMap(updateCol).expr
-             case None => attr
+          updateColOpt match {
+            case Some(updateCol) => strColumnMap(updateCol).expr
+            case None => attr
           }
       }
 
@@ -262,13 +273,13 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
   }
 
   /**
-    * Return an RDD on top of Hive ACID table
-    *
-    * @param requiredColumns - columns needed
-    * @param filters - filters that can be pushed down to file format
-    * @param readConf - read conf
-    * @return
-    */
+   * Return an RDD on top of Hive ACID table
+   *
+   * @param requiredColumns - columns needed
+   * @param filters         - filters that can be pushed down to file format
+   * @param readConf        - read conf
+   * @return
+   */
   def getRdd(requiredColumns: Array[String],
              filters: Array[Filter],
              readConf: SparkAcidConf,
@@ -278,25 +289,27 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
   }
 
   /**
-    * Used by streaming query to add a datframe to hive acid table.
-    * @param df - dataframe to insert
-    * @param curTxn - Transaction under which the operation is being done
-    */
+   * Used by streaming query to add a datframe to hive acid table.
+   *
+   * @param df     - dataframe to insert
+   * @param curTxn - Transaction under which the operation is being done
+   */
   def addBatch(df: DataFrame, curTxn: HiveAcidTxn): Unit = {
     val tableWriter = new TableWriter(sparkSession, curTxn, hiveAcidMetadata, sparkAcidConfig)
     tableWriter.process(HiveAcidOperation.INSERT_INTO, df)
   }
 
   /**
-    * Appends a given dataframe df into the hive acid table
-    *
-    * Note: This API is transactional in nature.
-    * @param df - dataframe to insert
-    * @param statementId Optional. In a same transaction, multiple statements like INSERT/UPDATE/DELETE
-    *                    (like in case of MERGE) can be issued.
-    *                    [[statementId]] has to be different for them to ensure delta collision
-    *                    is avoided for them during writes.
-    */
+   * Appends a given dataframe df into the hive acid table
+   *
+   * Note: This API is transactional in nature.
+   *
+   * @param df          - dataframe to insert
+   * @param statementId Optional. In a same transaction, multiple statements like INSERT/UPDATE/DELETE
+   *                    (like in case of MERGE) can be issued.
+   *                    [[statementId]] has to be different for them to ensure delta collision
+   *                    is avoided for them during writes.
+   */
   def insertInto(df: DataFrame, curTxn: HiveAcidTxn, statementId: Option[Int] = None): Unit = {
     val tableWriter = new TableWriter(sparkSession, curTxn, hiveAcidMetadata,
       sparkAcidConfig, statementId)
@@ -304,15 +317,16 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
   }
 
   /**
-    * Overwrites a given dataframe df onto the hive acid table
-    *
-    * Note: This API is transactional in nature.
-    * @param df - dataframe to insert
-    * @param statementId Optional. In a same transaction, multiple statements like INSERT/UPDATE/DELETE
-    *                    (like in case of MERGE) can be issued.
-    *                    [[statementId]] has to be different for them to ensure delta collision
-    *                    is avoided for them during writes.
-    */
+   * Overwrites a given dataframe df onto the hive acid table
+   *
+   * Note: This API is transactional in nature.
+   *
+   * @param df          - dataframe to insert
+   * @param statementId Optional. In a same transaction, multiple statements like INSERT/UPDATE/DELETE
+   *                    (like in case of MERGE) can be issued.
+   *                    [[statementId]] has to be different for them to ensure delta collision
+   *                    is avoided for them during writes.
+   */
   def insertOverwrite(df: DataFrame, curTxn: HiveAcidTxn, statementId: Option[Int] = None): Unit = {
     val tableWriter = new TableWriter(sparkSession, curTxn, hiveAcidMetadata,
       sparkAcidConfig, statementId)
@@ -320,11 +334,12 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
   }
 
   /**
-    * Delete rows from the table based on `condtional` expression.
-    *
-    * Note: This API is transactional in nature.
-    * @param condition - Boolean SQL Expression filtering rows to be deleted
-    */
+   * Delete rows from the table based on `condtional` expression.
+   *
+   * Note: This API is transactional in nature.
+   *
+   * @param condition - Boolean SQL Expression filtering rows to be deleted
+   */
   def delete(condition: Column, curTxn: HiveAcidTxn): Unit = {
     checkForSupport(HiveAcidOperation.DELETE)
     val (qualifiedPlan: LogicalPlan, resolvedDf: DataFrame) =
@@ -342,21 +357,22 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
   }
 
   /**
-    * NOT TO BE USED EXTERNALLY
-    * Not protected by transactionality, it is assumed curTxn is already
-    * set before calling this
-    * @param deleteDf DataFrame to be used to update is supposed to have
-    *                 same schema as tableSchemaWithRowId
-    * @param statementId Optional. In a same transaction, multiple statements like INSERT/UPDATE/DELETE
-    *                    (like in case of MERGE) can be issued.
-    *                    [[statementId]] has to be different for them to ensure delta collision
-    *                    is avoided for them during writes.
-    */
+   * NOT TO BE USED EXTERNALLY
+   * Not protected by transactionality, it is assumed curTxn is already
+   * set before calling this
+   *
+   * @param deleteDf    DataFrame to be used to update is supposed to have
+   *                    same schema as tableSchemaWithRowId
+   * @param statementId Optional. In a same transaction, multiple statements like INSERT/UPDATE/DELETE
+   *                    (like in case of MERGE) can be issued.
+   *                    [[statementId]] has to be different for them to ensure delta collision
+   *                    is avoided for them during writes.
+   */
   def mergeDelete(deleteDf: DataFrame, curTxn: HiveAcidTxn, statementId: Option[Int] = None): Unit = {
     if (curTxn == null) {
       throw new IllegalStateException("Transaction not set before invoking update on dataframe")
     }
-    if (deleteDf.schema != hiveAcidMetadata.tableSchemaWithRowId) {
+    if (deleteDf.schema.fields.map(f => f.withComment("").toDDL).toSet != hiveAcidMetadata.tableSchemaWithRowId.fields.map(f => f.withComment("").toDDL).toSet) {
       throw new UnsupportedOperationException("Delete Dataframe doesn't have expected schema. " +
         "Provided: " + deleteDf.schema.mkString(",") +
         "  Expected: " + hiveAcidMetadata.tableSchemaWithRowId.mkString(","))
@@ -367,12 +383,13 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
   }
 
   /**
-    * Update rows in the hive acid table based on condition and newValues
-    *
-    * Note: This API is transactional in nature.
-    * @param condition - condition string to identify rows which needs to be updated
-    * @param newValues - Map of (column, value) to set
-    */
+   * Update rows in the hive acid table based on condition and newValues
+   *
+   * Note: This API is transactional in nature.
+   *
+   * @param condition - condition string to identify rows which needs to be updated
+   * @param newValues - Map of (column, value) to set
+   */
   def update(condition: Option[String], newValues: Map[String, String], curTxn: HiveAcidTxn): Unit = {
     checkForSupport(HiveAcidOperation.UPDATE)
     val partCols = hiveAcidMetadata.partitionSchema.fieldNames.map(_.toLowerCase)
@@ -386,13 +403,14 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
   }
 
   /**
-    * Update rows in the hive acid table based on condition and newValues
-    *
-    * Note: This API is transactional in nature.
-    * @param condition - Optional condition string to identify rows which needs to be updated,
-    *                  if not specified then it means complete table.
-    * @param newValues - Map of (column, value) to set
-    */
+   * Update rows in the hive acid table based on condition and newValues
+   *
+   * Note: This API is transactional in nature.
+   *
+   * @param condition - Optional condition string to identify rows which needs to be updated,
+   *                  if not specified then it means complete table.
+   * @param newValues - Map of (column, value) to set
+   */
   def update(condition: Option[Column], newValues: java.util.Map[String, Column], curTxn: HiveAcidTxn): Unit = {
     checkForSupport(HiveAcidOperation.UPDATE)
     val partCols = hiveAcidMetadata.partitionSchema.fieldNames.map(_.toLowerCase)
@@ -407,18 +425,19 @@ class HiveAcidOperationDelegate(val sparkSession: SparkSession,
   }
 
   /**
-    * Uodated Df is written to the table
-    * @param updateDf DataFrame to be used to update is supposed to have same schema as tableSchemaWithRowId
-    * @param statementId Optional. In a same transaction, multiple statements like INSERT/UPDATE/DELETE
-    *                    (like in case of MERGE) can be issued.
-    *                    [[statementId]] has to be different for them to ensure delta collision
-    *                    is avoided for them during writes.
-    */
-  def mergeUpdate(updateDf : DataFrame, curTxn: HiveAcidTxn, statementId: Option[Int] = None): Unit = {
+   * Uodated Df is written to the table
+   *
+   * @param updateDf    DataFrame to be used to update is supposed to have same schema as tableSchemaWithRowId
+   * @param statementId Optional. In a same transaction, multiple statements like INSERT/UPDATE/DELETE
+   *                    (like in case of MERGE) can be issued.
+   *                    [[statementId]] has to be different for them to ensure delta collision
+   *                    is avoided for them during writes.
+   */
+  def mergeUpdate(updateDf: DataFrame, curTxn: HiveAcidTxn, statementId: Option[Int] = None): Unit = {
     if (curTxn == null) {
       throw new IllegalStateException("Transaction not set before invoking update on dataframe")
     }
-    if (updateDf.schema != hiveAcidMetadata.tableSchemaWithRowId) {
+    if (updateDf.schema.fields.map(f => f.withComment("").toDDL).toSet != hiveAcidMetadata.tableSchemaWithRowId.fields.map(f => f.withComment("").toDDL).toSet) {
       throw new UnsupportedOperationException("Update Dataframe doesn't have expected schema. " +
         "Provided: " + updateDf.schema.mkString(",") +
         "  Expected: " + hiveAcidMetadata.tableSchemaWithRowId.mkString(","))

@@ -14,11 +14,12 @@ class HiveAcidTest extends Environment {
     //проверить ситуацию при работе с обычной таблицей
     spark.conf.set("acid_max_num_buckets", 1)
 
-    spark.sql("create table ice_db.trans_src (id int, src string) stored as orc tblproperties('transactional'='true')")
-    spark.sql("create table ice_db.trans_tgt (id int, src string) stored as orc tblproperties('transactional'='true')")
+    spark.sql("create table ice_db.trans_src (id int comment 'id', src string comment 'src') stored as orc tblproperties('transactional'='true')")
+    spark.sql("create table ice_db.trans_tgt (id int comment 'ID', src string comment 'SRC') stored as orc tblproperties('transactional'='true')")
 
     spark.sql("insert into ice_db.trans_src values (1, 'spark')")
     spark.sql("insert into ice_db.trans_src values (2, 'spark')")
+    spark.sql("insert into ice_db.trans_tgt values (1, 'spark')")
 
     spark.sql("select * from ice_db.trans_src where id=1").createOrReplaceTempView("trans")
 
