@@ -25,7 +25,7 @@ import com.qubole.spark.hiveacid.datasource.HiveAcidDataSource.getFullyQualified
 import java.util.Locale
 import org.apache.spark.sql.{SparkSession, SparkSessionExtensions}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, DeleteFromTable, Filter, InsertAction, InsertIntoStatement, InsertStarAction, LogicalPlan, MergeIntoTable, SubqueryAlias, UpdateAction, UpdateStarAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, DeleteFromTable, Filter, InsertAction, InsertIntoStatement, InsertStarAction, LogicalPlan, MergeIntoTable, SubqueryAlias, UpdateAction, UpdateStarAction, UpdateTable, View}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -132,6 +132,8 @@ object EliminatedSubQuery {
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
     val r = EliminateSubqueryAliases(plan)
     r match {
+      case View(_, _, plan) =>
+        Some(plan)
       case LogicalRelation(r: HiveAcidRelation, _, _, _) =>
         Some(plan)
       case _ =>
