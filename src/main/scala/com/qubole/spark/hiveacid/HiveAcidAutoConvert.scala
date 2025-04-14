@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.{DDLUtils, ShowCreateTableAsSerdeCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.{SparkSession, SparkSessionExtensions}
 
@@ -133,6 +134,8 @@ object EliminatedSubQuery {
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
     val r = EliminateSubqueryAliases(plan)
     r match {
+      case x if x.isInstanceOf[DataSourceV2Relation] =>
+        Some(plan)
       case View(_, _, plan) =>
         Some(plan)
       case LogicalRelation(r: HiveAcidRelation, _, _, _) =>

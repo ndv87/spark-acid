@@ -14,6 +14,26 @@ class HiveAcidTest extends Environment {
     //проверить ситуацию при работе с обычной таблицей
     spark.conf.set("acid_max_num_buckets", 1)
 
+    Seq((1, "spark"), (2, "spark")).toDF("id", "src")
+      .writeTo("ice_db.tbl_src")
+      .tableProperty("write.format.default", "orc")
+      .tableProperty("write.orc.compression-codec", "zstd")
+      .tableProperty("engine.hive.enabled", "true")
+      .tableProperty("write.spark.accept-any-schema", "true")
+      .using("iceberg").createOrReplace()
+
+    spark.sql("create table ice_db.tbl_tgt (id int comment 'ID', src string comment 'SRC') stored as orc tblproperties('transactional'='true')")
+    spark.sql("insert into ice_db.tbl_tgt values (1, 'hive')")
+
+    spark.sql(
+      """
+        |merge into ice_db.tbl_tgt tgt using ice_db.tbl_src src on tgt.id=src.id
+        |when matched then update set tgt.src=src.src
+        |when not matched then insert *
+        |""".stripMargin)
+
+    assert(spark.sql("select * from ice_db.tbl_tgt").count == 2)
+
     spark.sql("create table ice_db.trans_src (id int comment 'id', src string comment 'src') stored as orc tblproperties('transactional'='true')")
     spark.sql("create table ice_db.trans_tgt (id int comment 'ID', src string comment 'SRC') stored as orc tblproperties('transactional'='true')")
 
