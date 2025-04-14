@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.catalog.{Table, TableCatalog}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
 
@@ -132,6 +133,8 @@ object EliminatedSubQuery {
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
     val r = EliminateSubqueryAliases(plan)
     r match {
+      case x if x.isInstanceOf[DataSourceV2Relation] =>
+        Some(plan)
       case View(_, _, plan) =>
         Some(plan)
       case LogicalRelation(r: HiveAcidRelation, _, _, _) =>
